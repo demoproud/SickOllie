@@ -631,7 +631,7 @@ def _detect_main_trigger(lora_name: str) -> tuple[str, str]:
 
 if PromptServer is not None and web is not None:
 
-    @PromptServer.instance.routes.get("/sickollie/loader-core/main-trigger")
+    @PromptServer.instance.routes.get("/sickollie/studio/loader-core/main-trigger")
     async def so_loader_core_main_trigger(request):
         lora_name = request.rel_url.query.get("lora", "")
         trigger, source = _detect_main_trigger(lora_name)
@@ -763,7 +763,7 @@ class FolderBatchLoraStackModelOnly:
             "include_subfolders": (
                 "BOOLEAN",
                 {
-                    "default": False,
+                    "default": True,
                     "tooltip": "Include nested LoRA folders beneath the selected folder.",
                 },
             ),
@@ -907,7 +907,7 @@ class FolderBatchLoraStackModelOnly:
         "main_folder",
     )
     FUNCTION = "load_loras"
-    CATEGORY = "Sick Ollie/Classic"
+    CATEGORY = "Sick Ollie/Studio"
     DESCRIPTION = (
         "Folder-scoped, looping main LoRA tester with queue-time progression, "
         "editable regex name cleaning, four secondary LoRA slots, and inactive "
@@ -1218,7 +1218,7 @@ class LoaderCoreEngine(FolderBatchLoraStackModelOnly):
             "include_subfolders": (
                 "BOOLEAN",
                 {
-                    "default": False,
+                    "default": True,
                 },
             ),
             "loop_folder": (
@@ -1280,29 +1280,15 @@ class LoaderCoreEngine(FolderBatchLoraStackModelOnly):
         "STRING",
         "STRING",
         "STRING",
-        "STRING",
-        "STRING",
-        "STRING",
-        "BOOLEAN",
-        "INT",
-        "STRING",
-        "STRING",
     )
     RETURN_NAMES = (
         "model",
-        "diffusion_model_file",
-        "diffusion_model_stem",
-        "main_file",
-        "raw_stem",
         "clean_name",
-        "applied_loras",
-        "main_active",
-        "folder_count",
         "main_trigger",
         "main_folder",
     )
     FUNCTION = "load_core"
-    CATEGORY = "Sick Ollie/Classic"
+    CATEGORY = "Sick Ollie/Studio"
     DESCRIPTION = (
         "Loads a diffusion model, applies a folder-cycling primary LoRA, "
         "then applies a dynamic rgthree-powered secondary LoRA stack."
@@ -1525,23 +1511,16 @@ class LoaderCoreEngine(FolderBatchLoraStackModelOnly):
 
         return (
             current_model,
-            diffusion_model_file,
-            diffusion_model_stem,
-            main_file,
-            raw_stem,
             clean_name,
-            "\n".join(applied),
-            main_active,
-            folder_count,
             str(main_trigger),
             str(main_folder),
         )
 
 
 NODE_CLASS_MAPPINGS = {
-    "SOLoaderCoreEngine": LoaderCoreEngine,
+    "SOLoaderCoreEngineStudio": LoaderCoreEngine,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "SOLoaderCoreEngine": "Loader Core",
+    "SOLoaderCoreEngineStudio": "Loader Core",
 }

@@ -29,7 +29,7 @@ import { rgthree } from "/extensions/rgthree-comfy/rgthree.js";
 import { rgthreeApi } from "/rgthree/common/rgthree_api.js";
 import { LORA_INFO_SERVICE } from "/rgthree/common/model_info_service.js";
 
-const TARGET = "SOLoaderCoreEngine";
+const TARGET = "SOLoaderCoreEngineStudio";
 const NONE = "None";
 const ALL_FOLDERS = "[All LoRA folders]";
 const ROOT_FOLDER = "[LoRA root only]";
@@ -39,6 +39,23 @@ const CONTROL_MODES = ["fixed", "increment", "decrement", "randomize", "shuffle"
 const DEFAULT_CLEAN_NAME_MODE = "auto:1";
 const SECONDARY_PREFIX = "secondary_lora_";
 const MAX_SECONDARY_LORAS = 10;
+const LOADER_DASHBOARD_VERSION = 2;
+const LOADER_CANONICAL_NAMES = [
+    "diffusion_model",
+    "weight_dtype",
+    "folder_name",
+    "epoch_filter",
+    "main_enabled",
+    "main_lora",
+    "main_strength",
+    "include_subfolders",
+    "loop_folder",
+    "control_after_generate",
+    "skip_none_during_cycle",
+    "off_name",
+    "auto_clean_name",
+    "cleanup_rules",
+];
 
 function widget(node, name) {
     return node.widgets?.find((item) => item.name === name);
@@ -84,6 +101,353 @@ function writeValues(comboWidget, values) {
     comboWidget.options.values = [...values];
 }
 
+
+function hideNativeWidget(target) {
+    if (!target) return;
+    if (!target.__soHiddenByNavigator) {
+        target.__soHiddenByNavigator = true;
+        target.__soOriginalType = target.type;
+        target.__soOriginalComputeSize = target.computeSize;
+    }
+    // Dashboard-owned backing widgets must remain serializable/callable, but
+    // they should never participate in the stock LiteGraph widget layout or
+    // paint pass. `hidden` handles newer frontends while the custom type and
+    // negative height keep legacy canvas builds from stacking ghost rows.
+    target.hidden = true;
+    target.type = "so-hidden-backing-widget";
+    target.computeSize = () => [0, -4];
+    target.draw = () => {};
+    target.mouse = () => false;
+    if (target.inputEl) {
+        target.inputEl.style.display = "none";
+        target.inputEl.style.visibility = "hidden";
+        target.inputEl.style.pointerEvents = "none";
+    }
+}
+
+function moveFrontendWidgetAfter(node, added, anchor, offset = 1) {
+    if (!added || !anchor || !Array.isArray(node.widgets)) return;
+    const addedIndex = node.widgets.indexOf(added);
+    const anchorIndex = node.widgets.indexOf(anchor);
+    if (addedIndex < 0 || anchorIndex < 0) return;
+    node.widgets.splice(addedIndex, 1);
+    node.widgets.splice(anchorIndex + offset, 0, added);
+}
+
+function allFolderPaths(node) {
+    if (!Array.isArray(node.__soAllFolderChoices)) {
+        const target = widget(node, "folder_name");
+        node.__soAllFolderChoices = readValues(target);
+    }
+    return (node.__soAllFolderChoices || [])
+        .map((value) => String(value ?? ""))
+        .filter((value) => value && value !== ALL_FOLDERS && value !== ROOT_FOLDER);
+}
+
+function folderNavigatorChildren(node, selectedValue) {
+    const selected = String(selectedValue ?? ALL_FOLDERS);
+    const base = selected === ALL_FOLDERS || selected === ROOT_FOLDER
+        ? ""
+        : normalizePath(selected);
+    const children = new Map();
+
+    for (const fullPath of allFolderPaths(node)) {
+        const normalized = normalizePath(fullPath);
+        let remainder = normalized;
+        if (base) {
+            if (!normalized.startsWith(base + "/")) continue;
+            remainder = normalized.slice(base.length + 1);
+        }
+        if (!remainder) continue;
+        const leaf = remainder.split("/")[0];
+        if (!leaf) continue;
+        const childPath = base ? `${base}/${leaf}` : leaf;
+        children.set(leaf, childPath);
+    }
+
+    return [...children.entries()].sort((a, b) =>
+        a[0].localeCompare(b[0], undefined, { sensitivity: "base" }),
+    );
+}
+
+function loraBrowserBasename(value) {
+    const normalized = normalizePath(value);
+    if (!normalized || normalized === NONE) return "None";
+    const slash = normalized.lastIndexOf("/");
+    return slash < 0 ? normalized : normalized.slice(slash + 1);
+}
+
+function loaderBrowserFolderText(value) {
+    const selected = String(value ?? ALL_FOLDERS);
+    if (selected === ALL_FOLDERS) return "LoRA Root · all folders";
+    if (selected === ROOT_FOLDER) return "LoRA Root · files only";
+    return normalizePath(selected);
+}
+
+function loaderBrowserButtonText(node) {
+    const folder = loaderBrowserFolderText(widget(node, "folder_name")?.value);
+    const main = loraBrowserBasename(widget(node, "main_lora")?.value);
+    return `📁 LoRA Browser   ${folder}  ·  ${main}`;
+}
+
+function ensurePointerTracker() {
+    if (window.__soBrowserPointerTrackerInstalled) return;
+    window.__soBrowserPointerTrackerInstalled = true;
+    window.__soBrowserLastPointer = { x: Math.round(window.innerWidth / 2), y: 180 };
+    document.addEventListener("pointerdown", (event) => {
+        window.__soBrowserLastPointer = { x: event.clientX, y: event.clientY };
+    }, true);
+}
+
+function closeSOFolderBrowser() {
+    const existing = document.getElementById("so-loader-folder-browser-popup");
+    if (existing) existing.remove();
+    if (window.__soLoaderBrowserEscape) {
+        document.removeEventListener("keydown", window.__soLoaderBrowserEscape, true);
+        window.__soLoaderBrowserEscape = null;
+    }
+    if (window.__soLoaderBrowserOutside) {
+        document.removeEventListener("pointerdown", window.__soLoaderBrowserOutside, true);
+        window.__soLoaderBrowserOutside = null;
+    }
+}
+
+function createBrowserShell(id, title, subtitle, onSearch) {
+    closeSOFolderBrowser();
+    const root = document.createElement("div");
+    root.id = id;
+    Object.assign(root.style, {
+        position: "fixed",
+        zIndex: "100000",
+        width: "510px",
+        maxWidth: "calc(100vw - 24px)",
+        background: "#151519",
+        border: "1px solid rgba(53,215,255,.62)",
+        borderRadius: "9px",
+        boxShadow: "0 12px 36px rgba(0,0,0,.58), 0 0 0 1px rgba(255,74,184,.10) inset",
+        color: "#eee",
+        font: "13px Arial, sans-serif",
+        overflow: "hidden",
+    });
+
+    const header = document.createElement("div");
+    Object.assign(header.style, { padding: "10px 12px 6px", borderBottom: "1px solid rgba(255,74,184,.34)" });
+    const titleEl = document.createElement("div");
+    titleEl.textContent = title;
+    Object.assign(titleEl.style, { fontWeight: "700", fontSize: "14px" });
+    const subtitleEl = document.createElement("div");
+    subtitleEl.textContent = subtitle;
+    Object.assign(subtitleEl.style, { marginTop: "3px", color: "#aaa", fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" });
+    header.append(titleEl, subtitleEl);
+
+    const search = document.createElement("input");
+    search.type = "text";
+    search.placeholder = "Filter folders or LoRAs";
+    Object.assign(search.style, {
+        boxSizing: "border-box", width: "calc(100% - 20px)", margin: "9px 10px 7px",
+        padding: "7px 9px", background: "#0d0d10", border: "1px solid rgba(246,230,90,.48)",
+        borderRadius: "4px", color: "#fff", outline: "none",
+    });
+
+    const list = document.createElement("div");
+    Object.assign(list.style, { maxHeight: "540px", overflowY: "auto", padding: "3px 0 7px" });
+    root.append(header, search, list);
+    document.body.append(root);
+
+    const pointer = window.__soBrowserLastPointer || { x: window.innerWidth / 2, y: 180 };
+    let left = Math.min(pointer.x - 18, window.innerWidth - 530);
+    let top = Math.min(pointer.y + 12, window.innerHeight - 620);
+    left = Math.max(10, left);
+    top = Math.max(10, top);
+    root.style.left = `${left}px`;
+    root.style.top = `${top}px`;
+
+    search.addEventListener("input", () => onSearch(search.value));
+    root.addEventListener("pointerdown", (event) => event.stopPropagation());
+    window.__soLoaderBrowserEscape = (event) => {
+        if (event.key === "Escape") closeSOFolderBrowser();
+    };
+    document.addEventListener("keydown", window.__soLoaderBrowserEscape, true);
+    window.__soLoaderBrowserOutside = (event) => {
+        if (!root.contains(event.target)) closeSOFolderBrowser();
+    };
+    setTimeout(() => {
+        document.addEventListener("pointerdown", window.__soLoaderBrowserOutside, true);
+        search.focus();
+    }, 0);
+    return { root, header, subtitleEl, search, list };
+}
+
+function browserRow(list, label, kind, callback, hint = "") {
+    const row = document.createElement("div");
+    const icon = kind === "folder" ? "📁" : kind === "action" ? "" : "";
+    row.textContent = `${icon}${icon ? "  " : ""}${label}`;
+    Object.assign(row.style, {
+        padding: "7px 12px",
+        cursor: "pointer",
+        borderBottom: "1px solid #242424",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        color: kind === "action" ? "#ccc" : "#f4f4f4",
+    });
+    if (hint) row.title = hint;
+    row.addEventListener("mouseenter", () => row.style.background = "rgba(53,215,255,.10)");
+    row.addEventListener("mouseleave", () => row.style.background = "transparent");
+    row.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        callback();
+    });
+    list.append(row);
+    return row;
+}
+
+function browserDivider(list) {
+    const divider = document.createElement("div");
+    Object.assign(divider.style, { height: "1px", background: "rgba(110,231,162,.34)", margin: "5px 0" });
+    list.append(divider);
+}
+
+function setLoaderFolder(node, value) {
+    const folderWidget = widget(node, "folder_name");
+    if (!folderWidget) return;
+    const next = String(value ?? ALL_FOLDERS);
+    folderWidget.value = next;
+    try { folderWidget.callback?.(next); } catch (error) {}
+    refreshLoaderFolderNavigator(node);
+    node.setDirtyCanvas?.(true, true);
+}
+
+function setLoaderMainLora(node, value) {
+    const mainWidget = widget(node, "main_lora");
+    if (!mainWidget) return;
+    mainWidget.value = String(value ?? NONE);
+    try { mainWidget.callback?.(mainWidget.value); } catch (error) {}
+    refreshLoaderFolderNavigator(node);
+    node.setDirtyCanvas?.(true, true);
+}
+
+function directLorasForBrowser(node, folderValue) {
+    const selected = String(folderValue ?? ALL_FOLDERS);
+    const parent = selected === ALL_FOLDERS || selected === ROOT_FOLDER ? "" : normalizePath(selected);
+    return (node.__soAllMainLoras || [])
+        .map((value) => String(value ?? ""))
+        .filter((value) => value && value !== NONE && parentFolder(value) === parent)
+        .sort((a, b) => loraBrowserBasename(a).localeCompare(loraBrowserBasename(b), undefined, { sensitivity: "base" }));
+}
+
+function renderLoaderBrowser(node, shell, query = "") {
+    const folderValue = String(widget(node, "folder_name")?.value ?? ALL_FOLDERS);
+    const folderText = loaderBrowserFolderText(folderValue);
+    shell.subtitleEl.textContent = folderText;
+    shell.list.replaceChildren();
+    const q = String(query ?? "").trim().toLowerCase();
+
+    if (q) {
+        const folderHits = allFolderPaths(node)
+            .filter((path) => normalizePath(path).toLowerCase().includes(q))
+            .slice(0, 220);
+        for (const path of folderHits) {
+            browserRow(shell.list, normalizePath(path), "folder", () => {
+                setLoaderFolder(node, path);
+                shell.search.value = "";
+                renderLoaderBrowser(node, shell, "");
+            }, path);
+        }
+        if (!folderHits.length) browserRow(shell.list, "No matching folders", "action", () => {});
+        return;
+    }
+
+    if (folderValue !== ALL_FOLDERS) {
+        browserRow(shell.list, "↑ Parent Folder", "action", () => {
+            if (folderValue === ROOT_FOLDER) {
+                setLoaderFolder(node, ALL_FOLDERS);
+            } else {
+                const normalized = normalizePath(folderValue);
+                const slash = normalized.lastIndexOf("/");
+                setLoaderFolder(node, slash < 0 ? ALL_FOLDERS : normalized.slice(0, slash));
+            }
+            renderLoaderBrowser(node, shell, "");
+        });
+    }
+    browserRow(shell.list, "⌂ LoRA Root · all folders", "action", () => {
+        setLoaderFolder(node, ALL_FOLDERS);
+        renderLoaderBrowser(node, shell, "");
+    });
+    if (folderValue !== ROOT_FOLDER) {
+        browserRow(shell.list, "• LoRA Root · files only", "action", () => {
+            setLoaderFolder(node, ROOT_FOLDER);
+            renderLoaderBrowser(node, shell, "");
+        });
+    }
+    browserDivider(shell.list);
+
+    const children = folderNavigatorChildren(node, folderValue);
+    for (const [leaf, path] of children) {
+        browserRow(shell.list, leaf, "folder", () => {
+            setLoaderFolder(node, path);
+            renderLoaderBrowser(node, shell, "");
+        }, path);
+    }
+
+    if (!children.length) {
+        browserRow(shell.list, "No deeper folders · current folder is selected", "action", () => {});
+    }
+}
+
+function openLoaderFolderBrowser(node) {
+    ensurePointerTracker();
+    const shell = createBrowserShell(
+        "so-loader-folder-browser-popup",
+        "Folder Browser",
+        loaderBrowserFolderText(widget(node, "folder_name")?.value),
+        (query) => renderLoaderBrowser(node, shell, query),
+    );
+    shell.search.placeholder = "Filter folders";
+    renderLoaderBrowser(node, shell, "");
+}
+
+function refreshLoaderFolderNavigator(node) {
+    node.setDirtyCanvas?.(true, true);
+}
+
+function ensureLoaderFolderNavigator(node) {
+    const folderWidget = widget(node, "folder_name");
+    const mainWidget = widget(node, "main_lora");
+    if (!folderWidget || !mainWidget) return;
+
+    if (!Array.isArray(node.__soAllFolderChoices)) node.__soAllFolderChoices = readValues(folderWidget);
+    hideNativeWidget(folderWidget);
+    hideNativeWidget(mainWidget);
+
+    // dev26/27 used a standalone frontend browser button. The dashboard owns
+    // browsing now, so collapse any stale copy without touching saved values.
+    if (node.__soFolderBrowserButton) hideNativeWidget(node.__soFolderBrowserButton);
+
+    if (!folderWidget.__soNavigatorBound) {
+        folderWidget.__soNavigatorBound = true;
+        const previousCallback = folderWidget.callback;
+        folderWidget.callback = function (...args) {
+            const result = previousCallback?.apply(this, args);
+            refreshLoaderFolderNavigator(node);
+            return result;
+        };
+    }
+
+    if (!mainWidget.__soBrowserLabelBound) {
+        mainWidget.__soBrowserLabelBound = true;
+        const previousCallback = mainWidget.callback;
+        mainWidget.callback = function (...args) {
+            const result = previousCallback?.apply(this, args);
+            refreshLoaderFolderNavigator(node);
+            return result;
+        };
+    }
+
+    refreshLoaderFolderNavigator(node);
+}
+
 async function copyText(value) {
     const text = String(value ?? "");
     if (!text) return false;
@@ -106,6 +470,23 @@ async function copyText(value) {
     } catch (error) {
         return false;
     }
+}
+
+function triggerCopyFeedback(node) {
+    // Browsers cannot provide true desktop haptics, but supported devices can
+    // vibrate briefly. The dashboard always provides a visual confirmation so
+    // desktop users get the same immediate "click" feedback.
+    try {
+        if (typeof navigator?.vibrate === "function") navigator.vibrate(18);
+    } catch (error) {}
+
+    node.__soTriggerCopied = true;
+    node.setDirtyCanvas?.(true, true);
+    clearTimeout(node.__soTriggerCopiedTimer);
+    node.__soTriggerCopiedTimer = setTimeout(() => {
+        node.__soTriggerCopied = false;
+        node.setDirtyCanvas?.(true, true);
+    }, 850);
 }
 
 function folderMatches(loraName, folderName, includeSubfolders) {
@@ -574,7 +955,7 @@ async function fetchMainTriggerFromServer(mainValue) {
         return "";
     }
 
-    const url = `/sickollie/loader-core/main-trigger?lora=${encodeURIComponent(value)}`;
+    const url = `/sickollie/studio/loader-core/main-trigger?lora=${encodeURIComponent(value)}`;
     const response = await fetch(url, { method: "GET" });
     if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -585,9 +966,10 @@ async function fetchMainTriggerFromServer(mainValue) {
 }
 
 function updateTriggerButton(node) {
-    if (!node.__soTriggerButton) return;
     const text = String(node.__soMainTrigger ?? "").trim();
-    node.__soTriggerButton.name = `📋 Copy trigger: ${displayTriggerValue(text)}`;
+    if (node.__soTriggerButton) {
+        node.__soTriggerButton.name = `📋 Copy trigger: ${displayTriggerValue(text)}`;
+    }
     node.setDirtyCanvas?.(true, true);
 }
 
@@ -617,6 +999,7 @@ function ensureTriggerButton(node) {
             if (!value) return;
             const normalName = `📋 Copy trigger: ${displayTriggerValue(value)}`;
             if (await copyText(value)) {
+                triggerCopyFeedback(node);
                 flashTriggerButton(node, button, normalName);
             }
         },
@@ -667,6 +1050,431 @@ async function refreshMainTrigger(node, force = false) {
     return node.__soMainTrigger;
 }
 
+
+const DASH_MIN_WIDTH = 720;
+const DASH_PAD = 10;
+const DASH_GAP = 7;
+const DASH_ROW_H = 30;
+const DASH_COLLAPSED_H = 392;
+const DASH_EXPANDED_H = 434;
+
+// Loader Core has four visible outputs but no visible inputs. Stock LiteGraph
+// stacks those outputs at the full node-slot spacing, which leaves a noticeably
+// larger empty shelf above the dashboard than the other Studio Core nodes.
+// Keep the sockets and labels intact, but compact just this output stack so the
+// MODEL card can sit at the same visual height as its siblings.
+const LOADER_OUTPUT_START_Y = 37;
+const LOADER_OUTPUT_STEP_Y = 16;
+const LOADER_DASH_MIN_TOP = 94;
+
+const DASH_COLORS = {
+    card: "rgba(24,24,27,.98)",
+    row: "rgba(39,39,43,.97)",
+    outline: "rgba(125,125,135,.42)",
+    label: "#9a9aa3",
+    text: "#ececef",
+    cyan: "#35d7ff",
+    magenta: "#ff4ab8",
+    yellow: "#f6e65a",
+    green: "#6ee7a2",
+    accent: "#ff4ab8",
+};
+
+function layoutLoaderOutputSockets(node) {
+    const outputs = node.outputs || [];
+    const right = Number(node.size?.[0] || DASH_MIN_WIDTH);
+
+    for (let index = 0; index < outputs.length; index++) {
+        const y = LOADER_OUTPUT_START_Y + index * LOADER_OUTPUT_STEP_Y;
+        outputs[index].pos = [right, y];
+    }
+}
+
+function loaderOutputBottom(node) {
+    const count = node.outputs?.length || 0;
+    if (!count) return 44;
+    return LOADER_OUTPUT_START_Y + (count - 1) * LOADER_OUTPUT_STEP_Y + 7;
+}
+
+function loaderOutputAnchor(node, slotIndex) {
+    const output = node.outputs?.[slotIndex];
+    if (!output) return null;
+    layoutLoaderOutputSockets(node);
+    const y = Number(output.pos?.[1]);
+    if (!Number.isFinite(y)) return null;
+    return { x: Number(node.size?.[0] || DASH_MIN_WIDTH), y };
+}
+
+function loaderDashboardTop(node) {
+    layoutLoaderOutputSockets(node);
+    return Math.max(LOADER_DASH_MIN_TOP, loaderOutputBottom(node) + 7);
+}
+
+function loaderDashboardHeight(node) {
+    return node.properties?.so_loader_dashboard_advanced ? DASH_EXPANDED_H : DASH_COLLAPSED_H;
+}
+
+function drawRoundRect(ctx, x, y, w, h, radius = 7, fill = null, stroke = null) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, radius);
+    else {
+        const r = Math.min(radius, w / 2, h / 2);
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+    }
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+}
+
+function drawCMYKGFrame(ctx, x, y, w, h, radius = 9, alpha = .48) {
+    ctx.save();
+    drawRoundRect(ctx, x, y, w, h, radius, "rgba(10,10,12,.24)", null);
+    const g = ctx.createLinearGradient(x, y, x + w, y + h);
+    g.addColorStop(0, DASH_COLORS.cyan); g.addColorStop(.34, DASH_COLORS.magenta);
+    g.addColorStop(.67, DASH_COLORS.yellow); g.addColorStop(1, DASH_COLORS.green);
+    ctx.globalAlpha = alpha;
+    drawRoundRect(ctx, x, y, w, h, radius, null, g);
+    ctx.restore();
+}
+
+function dashText(ctx, text, x, y, options = {}) {
+    ctx.save();
+    ctx.fillStyle = options.color || DASH_COLORS.text;
+    ctx.font = options.font || "12px Arial";
+    ctx.textAlign = options.align || "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(text ?? ""), x, y);
+    ctx.restore();
+}
+
+function dashSection(ctx, label, x, y, color = DASH_COLORS.label) {
+    dashText(ctx, String(label).toUpperCase(), x, y, { color, font: "700 10px Arial" });
+}
+
+function dashValueRow(ctx, x, y, w, h, label, value, options = {}) {
+    drawRoundRect(ctx, x, y, w, h, 7, DASH_COLORS.row, DASH_COLORS.outline);
+    dashText(ctx, label, x + 11, y + h / 2, { color: DASH_COLORS.label, font: "11px Arial" });
+    ctx.save();
+    ctx.font = options.valueFont || "12px Arial";
+    const max = Math.max(38, w - Math.min(130, w * .43) - 27);
+    const shown = fitString(ctx, String(value ?? ""), max);
+    ctx.restore();
+    dashText(ctx, shown, x + w - (options.chevron === false ? 11 : 21), y + h / 2, { align: "right", color: options.valueColor || DASH_COLORS.text, font: options.valueFont || "12px Arial" });
+    if (options.chevron !== false) dashText(ctx, "▾", x + w - 8, y + h / 2, { align: "right", color: DASH_COLORS.label, font: "10px Arial" });
+}
+
+function dashToggleRow(ctx, x, y, w, h, label, enabled) {
+    drawRoundRect(ctx, x, y, w, h, 7, DASH_COLORS.row, DASH_COLORS.outline);
+    dashText(ctx, label, x + 11, y + h / 2, { font: "11px Arial" });
+    const pw = 34, ph = 18, px = x + w - pw - 10, py = y + (h - ph) / 2;
+    drawRoundRect(ctx, px, py, pw, ph, ph / 2, enabled ? "rgba(126,193,146,.78)" : "rgba(82,82,88,.95)", null);
+    ctx.beginPath();
+    ctx.arc(px + (enabled ? pw - ph / 2 : ph / 2), py + ph / 2, 6.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#f2f2f2";
+    ctx.fill();
+}
+
+function dashHit(node, name, x, y, w, h, callback) {
+    node.__soLoaderDashboardHits = node.__soLoaderDashboardHits || {};
+    node.__soLoaderDashboardHits[name] = { x, y, w, h, callback };
+}
+
+function pointInHit(pos, hit) {
+    return Boolean(hit && pos && pos[0] >= hit.x && pos[0] <= hit.x + hit.w && pos[1] >= hit.y && pos[1] <= hit.y + hit.h);
+}
+
+function dashboardSet(node, name, value) {
+    const target = widget(node, name);
+    if (!target) return;
+    target.value = value;
+    try { target.callback?.(value); } catch (error) {}
+    node.setDirtyCanvas?.(true, true);
+}
+
+function dashboardToggle(node, name) {
+    const target = widget(node, name);
+    if (target) dashboardSet(node, name, !Boolean(target.value));
+}
+
+function dashboardMainFolderLeaf(node) {
+    const parent = parentFolder(widget(node, "main_lora")?.value ?? "");
+    return parent ? parent.slice(parent.lastIndexOf("/") + 1) : "LoRA root";
+}
+
+function dashboardCleanName(node) {
+    const raw = String(widget(node, "cleanup_rules")?.value ?? "");
+    return cleanModeCandidate(raw) || legacyRecommendedCleanName(node, parseCleanModeIndex(raw));
+}
+
+function openDashboardChoice(node, title, widgetName, values, formatter = null) {
+    const target = widget(node, widgetName);
+    if (!target) return;
+    const choices = (values || []).map((value) => String(value));
+    if (!choices.length) return;
+    ensurePointerTracker();
+    let render;
+    const shell = createBrowserShell(
+        "so-loader-folder-browser-popup",
+        title,
+        String(target.value ?? ""),
+        (query) => render(query),
+    );
+    shell.search.placeholder = `Filter ${title.toLowerCase()}`;
+    render = (query = "") => {
+        const q = String(query).trim().toLowerCase();
+        shell.list.replaceChildren();
+        const filtered = choices.filter((value) => {
+            const shown = formatter ? formatter(value) : value;
+            return !q || String(shown).toLowerCase().includes(q) || value.toLowerCase().includes(q);
+        });
+        for (const value of filtered.slice(0, 280)) {
+            const shown = formatter ? formatter(value) : value;
+            const active = String(target.value ?? "") === value;
+            browserRow(shell.list, `${active ? "✓  " : ""}${shown}`, "file", () => {
+                dashboardSet(node, widgetName, value);
+                closeSOFolderBrowser();
+            }, value);
+        }
+        if (!filtered.length) browserRow(shell.list, "No matches", "action", () => {});
+    };
+    render("");
+}
+
+function drawLoaderDashboard(node, ctx) {
+    if (!node.__soLoaderDashboardReady) return;
+    node.__soLoaderDashboardHits = {};
+    const top = loaderDashboardTop(node);
+    const x = DASH_PAD;
+    const w = node.size[0] - DASH_PAD * 2;
+    const rowH = DASH_ROW_H;
+    const gap = DASH_GAP;
+    let y = top;
+
+    ctx.save();
+    drawRoundRect(ctx, x - 2, y - 4, w + 4, loaderDashboardHeight(node), 10, "rgba(10,10,12,.34)", null);
+    drawCMYKGFrame(ctx, x - 2, y - 4, w + 4, loaderDashboardHeight(node), 10, .34);
+
+    drawCMYKGFrame(ctx, x - 4, y - 5, w + 8, 64, 9, .42);
+    dashSection(ctx, "Model", x + 2, y + 7, DASH_COLORS.cyan);
+    y += 17;
+    const modelW = w * .72 - gap / 2;
+    const weightW = w - modelW - gap;
+    dashValueRow(ctx, x, y, modelW, rowH, "Diffusion model", loraBrowserBasename(widget(node, "diffusion_model")?.value ?? ""), { valueFont: "11px Arial" });
+    dashValueRow(ctx, x + modelW + gap, y, weightW, rowH, "Weight", widget(node, "weight_dtype")?.value ?? "default");
+    dashHit(node, "model", x, y, modelW, rowH, () => openDashboardChoice(node, "Diffusion model", "diffusion_model", readValues(widget(node, "diffusion_model")), loraBrowserBasename));
+    dashHit(node, "weight", x + modelW + gap, y, weightW, rowH, () => openDashboardChoice(node, "Weight dtype", "weight_dtype", readValues(widget(node, "weight_dtype"))));
+    y += rowH + 13;
+
+    drawCMYKGFrame(ctx, x - 4, y - 5, w + 8, 177, 9, .46);
+    dashSection(ctx, "Main LoRA", x + 2, y + 7, DASH_COLORS.magenta);
+    y += 17;
+    // Folder navigation and LoRA selection are intentionally separate. The
+    // folder defines the testing pool; the LoRA selector is a searchable view
+    // of that pool after include-subfolders + epoch filtering are applied.
+    const folderW = w;
+    dashValueRow(ctx, x, y, folderW, rowH, "Folder scope", `📁 ${loaderBrowserFolderText(widget(node, "folder_name")?.value)}`);
+    dashHit(node, "browser", x, y, folderW, rowH, () => openLoaderFolderBrowser(node));
+    y += rowH + gap;
+
+    const allowedMain = allowedMainLoras(node);
+    const mainValue = String(widget(node, "main_lora")?.value ?? NONE);
+    const mainShownValue = mainValue === NONE ? "None" : loraBrowserBasename(mainValue);
+    dashValueRow(ctx, x, y, w, rowH, `Main LoRA · ${allowedMain.length} available`, mainShownValue);
+    dashHit(node, "mainlora", x, y, w, rowH, () => {
+        openDashboardChoice(
+            node,
+            `Main LoRA · ${allowedMain.length} available`,
+            "main_lora",
+            [NONE, ...allowedMain],
+            loraBrowserBasename,
+        );
+    });
+    y += rowH + gap;
+
+    const third = (w - gap * 2) / 3;
+    dashToggleRow(ctx, x, y, third, rowH, "Enabled", Boolean(widget(node, "main_enabled")?.value));
+    dashValueRow(ctx, x + third + gap, y, third, rowH, "Strength", Number(widget(node, "main_strength")?.value ?? 1).toFixed(2), { chevron: false });
+    dashValueRow(ctx, x + (third + gap) * 2, y, third, rowH, "Epoch", widget(node, "epoch_filter")?.value ?? ALL_EPOCHS);
+    dashHit(node, "enabled", x, y, third, rowH, () => dashboardToggle(node, "main_enabled"));
+    dashHit(node, "strength", x + third + gap, y, third, rowH, (event) => {
+        app.canvas.prompt("Main LoRA Strength", widget(node, "main_strength")?.value ?? 1, (value) => {
+            const n = Number(value); if (Number.isFinite(n)) dashboardSet(node, "main_strength", n);
+        }, event);
+    });
+    dashHit(node, "epoch", x + (third + gap) * 2, y, third, rowH, () => openDashboardChoice(node, "Epoch filter", "epoch_filter", readValues(widget(node, "epoch_filter"))));
+    y += rowH + gap;
+
+    const half = (w - gap) / 2;
+    dashValueRow(ctx, x, y, half, rowH, "Clean name", dashboardCleanName(node));
+    const triggerCopied = Boolean(node.__soTriggerCopied);
+    drawRoundRect(
+        ctx,
+        x + half + gap,
+        y,
+        half,
+        rowH,
+        7,
+        triggerCopied ? "rgba(74, 132, 101, .34)" : DASH_COLORS.row,
+        triggerCopied ? "rgba(137, 213, 166, .82)" : DASH_COLORS.outline,
+    );
+    dashText(
+        ctx,
+        triggerCopied ? "Trigger · copied" : "Trigger",
+        x + half + gap + 11,
+        y + rowH / 2,
+        { color: triggerCopied ? "#9cddb4" : DASH_COLORS.label, font: "11px Arial" },
+    );
+    const trigger = displayTriggerValue(node.__soMainTrigger ?? "");
+    ctx.save(); ctx.font = "12px Arial";
+    const trigShown = fitString(ctx, trigger, half - 105); ctx.restore();
+    dashText(
+        ctx,
+        trigShown,
+        x + w - 35,
+        y + rowH / 2,
+        { align: "right", color: triggerCopied ? "#b9efca" : (trigger === "none" ? DASH_COLORS.label : DASH_COLORS.text) },
+    );
+    dashText(ctx, triggerCopied ? "✓" : "📋", x + w - 11, y + rowH / 2, { align: "right", color: triggerCopied ? "#9cddb4" : DASH_COLORS.accent });
+    dashHit(node, "clean", x, y, half, rowH, () => openDashboardChoice(node, "Clean name", "cleanup_rules", readValues(widget(node, "cleanup_rules")), cleanModeCandidate));
+    dashHit(node, "trigger", x + half + gap, y, half, rowH, async () => {
+        const value = String(node.__soMainTrigger ?? "").trim();
+        if (!value) return;
+        if (await copyText(value)) triggerCopyFeedback(node);
+    });
+    y += rowH + 17;
+
+    dashText(ctx, `Folder output: ${dashboardMainFolderLeaf(node)}`, x + 2, y - 6, { color: DASH_COLORS.label, font: "10px Arial" });
+    const expanded = Boolean(node.properties?.so_loader_dashboard_advanced);
+    drawCMYKGFrame(ctx, x - 4, y - 5, w + 8, expanded ? 124 : 94, 9, .42);
+    dashSection(ctx, "Testing", x + 2, y + 7, DASH_COLORS.yellow);
+    y += 17;
+    dashValueRow(ctx, x, y, third, rowH, "After generate", widget(node, "control_after_generate")?.value ?? "fixed");
+    dashToggleRow(ctx, x + third + gap, y, third, rowH, "Include subfolders", Boolean(widget(node, "include_subfolders")?.value));
+    dashToggleRow(ctx, x + (third + gap) * 2, y, third, rowH, "Skip None", Boolean(widget(node, "skip_none_during_cycle")?.value));
+    dashHit(node, "mode", x, y, third, rowH, () => openDashboardChoice(node, "After generate", "control_after_generate", CONTROL_MODES));
+    dashHit(node, "include", x + third + gap, y, third, rowH, () => dashboardToggle(node, "include_subfolders"));
+    dashHit(node, "skip", x + (third + gap) * 2, y, third, rowH, () => dashboardToggle(node, "skip_none_during_cycle"));
+    y += rowH + 9;
+
+    drawRoundRect(ctx, x, y, w, 28, 7, "rgba(31,31,34,.96)", "rgba(110,231,162,.28)");
+    dashText(ctx, `Advanced ${expanded ? "▾" : "▸"}`, x + 11, y + 14, { color: DASH_COLORS.green, font: "700 10px Arial" });
+    dashText(ctx, "loop + off-state name", x + w - 11, y + 14, { align: "right", color: "#77777e", font: "10px Arial" });
+    dashHit(node, "advanced", x, y, w, 28, () => {
+        node.properties = node.properties || {};
+        node.properties.so_loader_dashboard_advanced = !expanded;
+        layoutLoaderDashboard(node, true);
+    });
+    y += 35;
+
+    if (expanded) {
+        const advHalf = (w - gap) / 2;
+        dashToggleRow(ctx, x, y, advHalf, rowH, "Loop cycle", Boolean(widget(node, "loop_folder")?.value));
+        dashValueRow(ctx, x + advHalf + gap, y, advHalf, rowH, "Off name", widget(node, "off_name")?.value ?? "no_lora", { chevron: false });
+        dashHit(node, "loop", x, y, advHalf, rowH, () => dashboardToggle(node, "loop_folder"));
+        dashHit(node, "offname", x + advHalf + gap, y, advHalf, rowH, (event) => {
+            app.canvas.prompt("Off-state name", widget(node, "off_name")?.value ?? "no_lora", (value) => dashboardSet(node, "off_name", String(value ?? "")), event);
+        });
+    }
+
+    ctx.restore();
+}
+
+function repairLoaderDashboardValues(node) {
+    const mode = widget(node, "control_after_generate");
+    if (mode && !CONTROL_MODES.includes(String(mode.value))) {
+        mode.value = "fixed";
+    }
+    const loop = widget(node, "loop_folder");
+    if (loop && typeof loop.value !== "boolean") loop.value = true;
+    const skip = widget(node, "skip_none_during_cycle");
+    if (skip && typeof skip.value !== "boolean") skip.value = true;
+    const include = widget(node, "include_subfolders");
+    if (include && typeof include.value !== "boolean") include.value = true;
+    const enabled = widget(node, "main_enabled");
+    if (enabled && typeof enabled.value !== "boolean") enabled.value = true;
+    const offName = widget(node, "off_name");
+    if (offName && typeof offName.value !== "string") offName.value = "no_lora";
+    const auto = widget(node, "auto_clean_name");
+    if (auto) auto.value = true;
+}
+
+function hideLoaderDashboardBackingWidgets(node) {
+    for (const name of LOADER_CANONICAL_NAMES) hideNativeWidget(widget(node, name));
+    const auto = widget(node, "auto_clean_name");
+    if (auto && auto.value !== true) {
+        auto.value = true;
+        try { auto.callback?.(true); } catch (error) {}
+    }
+    if (node.__soFolderBrowserButton) hideNativeWidget(node.__soFolderBrowserButton);
+    if (node.__soTriggerButton) hideNativeWidget(node.__soTriggerButton);
+}
+
+function layoutLoaderDashboard(node, refit = false) {
+    if (!node.__soLoaderDashboardReady) return;
+    repairLoaderDashboardValues(node);
+    hideLoaderDashboardBackingWidgets(node);
+    const top = loaderDashboardTop(node);
+    node.widgets_start_y = top + loaderDashboardHeight(node) + 10;
+    node.size[0] = Math.max(Number(node.size?.[0] || 0), DASH_MIN_WIDTH);
+    if (refit) {
+        const computed = node.computeSize?.() || [node.size[0], node.widgets_start_y + 180];
+        node.size[1] = Math.max(Number(computed[1] || 0) + 8, node.widgets_start_y + 110);
+    }
+    node.setDirtyCanvas?.(true, true);
+}
+
+function ensureLoaderDashboard(node) {
+    node.properties = node.properties || {};
+    node.properties.so_loader_dashboard_version = LOADER_DASHBOARD_VERSION;
+    node.__soLoaderDashboardReady = true;
+    repairLoaderDashboardValues(node);
+    hideLoaderDashboardBackingWidgets(node);
+    layoutLoaderDashboard(node, true);
+}
+
+function installLoaderDashboardHooks(nodeType) {
+    // Match the compact visual stack with the actual cable anchor positions.
+    // This is output-only and Studio-Loader-only, so graph semantics and the
+    // other Core nodes remain completely untouched.
+    const originalGetConnectionPos = nodeType.prototype.getConnectionPos;
+    nodeType.prototype.getConnectionPos = function (isInput, slot, out) {
+        if (!isInput && this.__soLoaderDashboardReady) {
+            let slotIndex = typeof slot === "number" ? slot : this.findOutputSlot?.(slot);
+            if (!Number.isInteger(slotIndex) || slotIndex < 0) slotIndex = Number(slot);
+            const anchor = loaderOutputAnchor(this, slotIndex);
+            if (anchor) {
+                const result = out || [0, 0];
+                result[0] = Number(this.pos?.[0] || 0) + anchor.x;
+                result[1] = Number(this.pos?.[1] || 0) + anchor.y;
+                return result;
+            }
+        }
+        return originalGetConnectionPos?.apply(this, arguments);
+    };
+
+    const originalForeground = nodeType.prototype.onDrawForeground;
+    nodeType.prototype.onDrawForeground = function (ctx) {
+        try { originalForeground?.apply(this, arguments); } catch (error) {}
+        drawLoaderDashboard(this, ctx);
+    };
+
+    const originalMouseDown = nodeType.prototype.onMouseDown;
+    nodeType.prototype.onMouseDown = function (event, pos, canvas) {
+        if (this.__soLoaderDashboardReady) {
+            for (const hit of Object.values(this.__soLoaderDashboardHits || {})) {
+                if (pointInHit(pos, hit)) {
+                    hit.callback(event, pos, this);
+                    return true;
+                }
+            }
+        }
+        return originalMouseDown?.apply(this, arguments);
+    };
+}
+
 class SecondaryHeaderWidget extends RgthreeBaseWidget {
     constructor() {
         super("secondary_lora_header");
@@ -705,7 +1513,8 @@ class SecondaryHeaderWidget extends RgthreeBaseWidget {
             ctx.fillStyle = LiteGraph.WIDGET_TEXT_COLOR;
             ctx.textAlign = "left";
             ctx.textBaseline = "middle";
-            ctx.fillText("Toggle All Secondary LoRAs", posX, midY);
+            const populated = (node.__soSecondaryWidgets || []).filter((item) => item.isPopulated()).length;
+            ctx.fillText(`SECONDARY LoRAs  ${populated} / ${MAX_SECONDARY_LORAS}`, posX, midY);
 
             const rightX =
                 node.size[0] -
@@ -735,7 +1544,7 @@ class SecondaryLoraWidget extends RgthreeBaseWidget {
         this.slotIndex = Number(slotIndex) || 1;
         this._soVisible = this.slotIndex === 1;
         this._value = {
-            on: true,
+            on: false,
             lora: null,
             strength: 1,
         };
@@ -778,7 +1587,7 @@ class SecondaryLoraWidget extends RgthreeBaseWidget {
     set value(value) {
         if (!value || typeof value !== "object") {
             this._value = {
-                on: true,
+                on: false,
                 lora: null,
                 strength: 1,
             };
@@ -1107,15 +1916,17 @@ function installFixedSecondaryMethods(node) {
         }
 
         target.setLora(lora);
-        target.value.on = true;
+        target.value.on = false;
         target._soVisible = true;
         node.size[1] = Math.max(node.size[1], node.computeSize()[1]);
+        layoutLoaderDashboard(node, true);
         node.setDirtyCanvas?.(true, true);
         return target;
     };
 
     node.__soClearSecondary = (secondary) => {
         secondary?.clear?.();
+        layoutLoaderDashboard(node, true);
         node.setDirtyCanvas?.(true, true);
     };
 }
@@ -1442,13 +2253,58 @@ function installContextMenuHooks(nodeType) {
     };
 }
 
+
+function normalizeLoaderWorkflow(info) {
+    let migrated = migrateEpochFilterWorkflow(info);
+    const values = migrated?.widgets_values;
+    if (!Array.isArray(values)) return migrated;
+
+    // dev27 inserted a non-serialized browser widget between folder_name and
+    // epoch_filter. Current LiteGraph serialization can leave a null hole at
+    // that position. Repair that exact shape before any native widget receives
+    // values, then gather secondary rows by object shape instead of position.
+    if (
+        values.length >= 15 &&
+        values[3] == null &&
+        typeof values[4] === "string" &&
+        (values[4] === ALL_EPOCHS || values[4] === NO_EPOCH_TAG || /^Epoch\s+\d+$/i.test(values[4]))
+    ) {
+        const secondaries = values
+            .filter((value) => value && typeof value === "object" && typeof value.lora !== "undefined")
+            .slice(0, MAX_SECONDARY_LORAS);
+        migrated = {
+            ...migrated,
+            widgets_values: [
+                values[0], values[1], values[2], values[4], values[5], values[6],
+                values[7], values[8], values[9], values[10], values[11], values[12],
+                values[13], values[14], ...secondaries,
+            ],
+        };
+    }
+
+    return migrated;
+}
+
+function loaderCanonicalValues(node) {
+    return LOADER_CANONICAL_NAMES.map((name) => widget(node, name)?.value);
+}
+
+function loaderSecondaryValues(node) {
+    return (node.__soSecondaryWidgets || []).slice(0, MAX_SECONDARY_LORAS).map((secondary) => ({
+        on: secondary?.value?.on !== false,
+        lora: secondary?.value?.lora ?? null,
+        strength: Number(secondary?.value?.strength ?? 1),
+    }));
+}
+
 app.registerExtension({
-    name: "SickOllie.LoaderCorePowerSecondaries",
+    name: "SickOllie.Studio.LoaderCore",
 
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== TARGET) return;
 
         installContextMenuHooks(nodeType);
+        installLoaderDashboardHooks(nodeType);
 
         // LiteGraph applies widgets_values inside configure() and only calls
         // onConfigure() afterward. Intercept configure itself so migrations
@@ -1457,8 +2313,25 @@ app.registerExtension({
         nodeType.prototype.configure = function (info) {
             return originalNodeConfigure.call(
                 this,
-                migrateEpochFilterWorkflow(info),
+                normalizeLoaderWorkflow(info),
             );
+        };
+
+        const originalSerialize = nodeType.prototype.serialize;
+        nodeType.prototype.serialize = function () {
+            const data = originalSerialize?.apply(this, arguments) || {};
+            data.properties = {
+                ...(data.properties || {}),
+                so_loader_dashboard_version: LOADER_DASHBOARD_VERSION,
+            };
+            // Always write a compact, canonical array. This deliberately
+            // excludes frontend-only UI elements so they cannot create sparse
+            // holes and positional shifts on reload.
+            data.widgets_values = [
+                ...loaderCanonicalValues(this),
+                ...loaderSecondaryValues(this),
+            ];
+            return data;
         };
 
         const originalCreated =
@@ -1471,6 +2344,7 @@ app.registerExtension({
                     arguments,
                 );
 
+            this.bgcolor = "#000000";
             ensureCleanNameCombo(this);
 
             const mainWidget = widget(
@@ -1569,13 +2443,15 @@ app.registerExtension({
                 };
             }
 
+            ensureLoaderFolderNavigator(this);
             rgthreeApi.getLoras();
             addFixedSecondaryUI(this);
-            ensureTriggerButton(this);
+            ensureLoaderDashboard(this);
             refreshEpochChoices(this);
             refreshMainChoices(this, false);
             refreshCleanNameChoices(this);
             refreshMainTrigger(this, false);
+            layoutLoaderDashboard(this, true);
 
             return result;
         };
@@ -1584,8 +2460,9 @@ app.registerExtension({
             nodeType.prototype.onConfigure;
 
         nodeType.prototype.onConfigure = function (info) {
+            this.bgcolor = "#000000";
             const configuredInfo =
-                migrateEpochFilterWorkflow(info);
+                normalizeLoaderWorkflow(info);
 
             const result =
                 originalConfigure?.call(
@@ -1597,15 +2474,17 @@ app.registerExtension({
                 dynamicValuesFromWorkflow(configuredInfo);
 
             setTimeout(() => {
+                ensureLoaderFolderNavigator(this);
                 addFixedSecondaryUI(
                     this,
                     values,
                 );
-                ensureTriggerButton(this);
+                ensureLoaderDashboard(this);
                 refreshEpochChoices(this);
                 refreshMainChoices(this, false);
                 refreshCleanNameChoices(this);
                 refreshMainTrigger(this, false);
+                layoutLoaderDashboard(this, true);
             }, 0);
 
             return result;

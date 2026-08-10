@@ -172,6 +172,11 @@ class SOGenerationPipeline(_ClipVaeCacheMixin):
         text_encoders = folder_paths.get_filename_list("text_encoders")
         vaes = folder_paths.get_filename_list("vae")
 
+        preferred_clip = "qwen3vl_4b_fp8_scaled.safetensors"
+        preferred_vae = "qwen_image_vae.safetensors"
+        default_clip = preferred_clip if preferred_clip in text_encoders else (text_encoders[0] if text_encoders else "")
+        default_vae = preferred_vae if preferred_vae in vaes else (vaes[0] if vaes else "")
+
         return {
             "required": {
                 "model": ("MODEL",),
@@ -187,7 +192,7 @@ class SOGenerationPipeline(_ClipVaeCacheMixin):
                 "clip_name": (
                     text_encoders,
                     {
-                        "default": text_encoders[0] if text_encoders else "",
+                        "default": default_clip,
                     },
                 ),
                 "clip_type": (
@@ -205,13 +210,13 @@ class SOGenerationPipeline(_ClipVaeCacheMixin):
                 "vae_name": (
                     vaes,
                     {
-                        "default": vaes[0] if vaes else "",
+                        "default": default_vae,
                     },
                 ),
                 "resolution_mode": (
                     RESOLUTION_MODES,
                     {
-                        "default": "custom",
+                        "default": "preset",
                     },
                 ),
                 "custom_width": (
@@ -337,10 +342,10 @@ class SOGenerationPipeline(_ClipVaeCacheMixin):
             },
         }
 
-    RETURN_TYPES = ('LATENT', 'VAE', 'INT', 'INT', 'INT', 'STRING')
-    RETURN_NAMES = ('samples', 'vae', 'seed_used', 'width', 'height', 'generation_info')
+    RETURN_TYPES = ('LATENT', 'VAE')
+    RETURN_NAMES = ('samples', 'vae')
     FUNCTION = 'run_pipeline'
-    CATEGORY = "Sick Ollie/Classic"
+    CATEGORY = "Sick Ollie/Studio"
     DESCRIPTION = 'Stable Krea2 generation core with internal CLIP and VAE loading, optional external CONDITIONING overrides for image-edit/reference encoders, fixed empty negative conditioning fallback, live preview, and persistent seed controls.'
     SEARCH_ALIASES = ['generation pipeline', 'krea2 pipeline', 'clip vae sampler', 'one box render']
 
@@ -496,8 +501,8 @@ class SOGenerationPipeline(_ClipVaeCacheMixin):
             'height': [height],
             'generation_info': [generation_info],
         }
-        return {'ui': ui_payload, 'result': (latent_out, vae, seed_used, width, height, generation_info)}
+        return {'ui': ui_payload, 'result': (latent_out, vae)}
 
 
-NODE_CLASS_MAPPINGS = {'SOGenerationPipeline': SOGenerationPipeline}
-NODE_DISPLAY_NAME_MAPPINGS = {'SOGenerationPipeline': 'Generation Core'}
+NODE_CLASS_MAPPINGS = {'SOGenerationPipelineStudio': SOGenerationPipeline}
+NODE_DISPLAY_NAME_MAPPINGS = {'SOGenerationPipelineStudio': 'Generation Core'}

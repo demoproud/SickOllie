@@ -20,6 +20,8 @@ VARIABLE_CHOICES = [
     "clean_name",
     "raw_stem",
     "model_name",
+    "main_folder",
+    "main_trigger",
     "seed",
     "prompt_index",
     "outfit_index",
@@ -56,6 +58,8 @@ def _context_values(**kwargs) -> dict[str, str]:
         'clean_name': str(kwargs.get('clean_name', '') or ''),
         'raw_stem': str(kwargs.get('raw_stem', '') or ''),
         'model_name': str(kwargs.get('model_name', '') or ''),
+        'main_folder': str(kwargs.get('main_folder', '') or ''),
+        'main_trigger': str(kwargs.get('main_trigger', '') or ''),
         'seed': str(kwargs.get('seed', '') if kwargs.get('seed', '') is not None else ''),
         'prompt_index': str(kwargs.get('prompt_index', '') if kwargs.get('prompt_index', '') is not None else ''),
         'outfit_index': str(kwargs.get('outfit_index', '') if kwargs.get('outfit_index', '') is not None else ''),
@@ -182,6 +186,97 @@ def _tensor_to_pil(image_like):
         raise TypeError(f'Unsupported image array shape for saving: {arr.shape}')
 
     return Image.fromarray(arr)
+
+
+def _extra_mapping(extra_pnginfo) -> dict[str, Any]:
+    if isinstance(extra_pnginfo, dict):
+        return extra_pnginfo
+    if isinstance(extra_pnginfo, list):
+        merged: dict[str, Any] = {}
+        for item in extra_pnginfo:
+            if isinstance(item, dict):
+                merged.update(item)
+        return merged
+    return {}
+
+
+def _string_list(value: Any) -> str:
+    if isinstance(value, (list, tuple)):
+        return "\n".join(str(item) for item in value if str(item).strip())
+    return str(value or '').strip()
+
+
+def _runtime_context(extra_pnginfo) -> dict[str, Any]:
+    """Collect resolved Sick Ollie values already published by upstream Core nodes.
+
+    EXTRA_PNGINFO is shared across the queued graph, so Loader, Prompt and
+    Generation Core can act as a zero-wire context bus for Output Core. Keys are
+    only added when the corresponding upstream Core actually published them; an
+    explicitly published empty value therefore means "not used" rather than
+    falling back to a stale Output widget value.
+    """
+    extra = _extra_mapping(extra_pnginfo)
+    context: dict[str, Any] = {}
+
+    generation = _parse_generation_info('', extra_pnginfo=extra)
+    if generation:
+        context['generation_info'] = generation
+        if 'seed_used' in generation:
+            context['seed'] = generation.get('seed_used')
+
+    loader_map = {
+        'so_loader_core_clean_name': 'clean_name',
+        'so_loader_core_raw_stem': 'raw_stem',
+        'so_loader_core_main_folder': 'main_folder',
+        'so_loader_core_main_trigger': 'main_trigger',
+    }
+    for source_key, target_key in loader_map.items():
+        if source_key in extra:
+            context[target_key] = str(extra.get(source_key) or '')
+
+    if 'so_loader_core_diffusion_model' in extra:
+        diffusion_file = str(extra.get('so_loader_core_diffusion_model') or '')
+        context['model_name'] = Path(diffusion_file).stem if diffusion_file else ''
+    if 'so_loader_core_applied_loras' in extra:
+        context['applied_loras'] = _string_list(extra.get('so_loader_core_applied_loras'))
+
+    prompt_resolved = extra.get('so_prompt_core_resolved')
+    if not isinstance(prompt_resolved, dict):
+        prompt_resolved = {}
+    prompt_meta = prompt_resolved.get('prompt') if isinstance(prompt_resolved.get('prompt'), dict) else {}
+    outfit_a = prompt_resolved.get('outfit_a') if isinstance(prompt_resolved.get('outfit_a'), dict) else {}
+    scene_meta = prompt_resolved.get('scene') if isinstance(prompt_resolved.get('scene'), dict) else {}
+
+    scalar_sources = (
+        ('so_prompt_index_resolved', 'prompt_index', prompt_meta.get('index')),
+        ('so_outfit_a_index_resolved', 'outfit_index', outfit_a.get('index')),
+        ('so_scene_index_resolved', 'scene_index', scene_meta.get('index')),
+    )
+    for source_key, target_key, structured_fallback in scalar_sources:
+        if source_key in extra:
+            value = extra.get(source_key)
+            context[target_key] = '' if value is None else value
+        elif structured_fallback is not None:
+            context[target_key] = structured_fallback
+
+    file_sources = (
+        ('so_prompt_file', 'prompt_file', prompt_meta.get('file')),
+        ('so_outfit_a_file', 'outfit_file', outfit_a.get('file')),
+        ('so_scene_file', 'scene_file', scene_meta.get('file')),
+    )
+    for source_key, target_key, structured_fallback in file_sources:
+        if source_key in extra:
+            context[target_key] = str(extra.get(source_key) or '')
+        elif structured_fallback is not None:
+            context[target_key] = str(structured_fallback or '')
+
+    return context
+
+
+def _prefer_runtime(runtime: dict[str, Any], key: str, fallback: Any) -> Any:
+    if key not in runtime:
+        return fallback
+    return runtime.get(key)
 
 
 def _parse_generation_info(generation_info, extra_pnginfo=None) -> dict[str, Any]:
@@ -407,6 +502,7 @@ def _extract_model_name_from_node(node: dict) -> str:
         "CheckpointLoader",
         "UNETLoaderGGUF",
         "SOLoaderCoreEngine",
+        "SOLoaderCoreEngineStudio",
     ):
         return str(values[0]).strip() if values else ""
     return _first_string_widget(node)
@@ -430,6 +526,7 @@ def _auto_detect_base_model(extra_pnginfo, unique_id=None) -> tuple[str, str]:
             'CheckpointLoader',
             'UNETLoaderGGUF',
             'SOLoaderCoreEngine',
+            'SOLoaderCoreEngineStudio',
         ):
             candidates.append((distances.get(nid, 999999), nid, node))
     if not candidates:
@@ -733,8 +830,7 @@ class SOOutputBuilderSave:
     def INPUT_TYPES(cls):
         return {
             'required': {
-                'images': ('IMAGE',),
-                'output_root': ('STRING', {'default': '_SickOllie_Art', 'multiline': False, 'tooltip': 'Root output folder relative to ComfyUI output.'}),
+                'output_root': ('STRING', {'default': 'Project Folder Name', 'multiline': False, 'tooltip': 'Root output folder relative to ComfyUI output.'}),
                 'subfolder_literal': ('STRING', {'default': '', 'multiline': False}),
                 'subfolder_var_1': (VARIABLE_CHOICES, {'default': 'clean_name'}),
                 'subfolder_var_2': (VARIABLE_CHOICES, {'default': NONE}),
@@ -759,17 +855,21 @@ class SOOutputBuilderSave:
                 'raw_stem': ('STRING', {'default': '', 'multiline': False}),
                 'model_name': ('STRING', {'default': '', 'multiline': False, 'tooltip': 'Connect a model name string here if desired.'}),
                 'seed': ('INT', {'default': 0, 'min': -1125899906842624, 'max': 1125899906842624, 'step': 1}),
-                'prompt_index': ('INT', {'default': 0, 'min': -2147483648, 'max': 2147483647, 'step': 1}),
-                'outfit_index': ('INT', {'default': 0, 'min': -2147483648, 'max': 2147483647, 'step': 1}),
-                'scene_index': ('INT', {'default': 0, 'min': -2147483648, 'max': 2147483647, 'step': 1}),
+                'prompt_index': ('STRING', {'default': '0', 'multiline': False, 'tooltip': 'Resolved prompt index override. String-backed so blank legacy/dashboard values cannot fail prompt validation.'}),
+                'outfit_index': ('STRING', {'default': '0', 'multiline': False, 'tooltip': 'Resolved outfit index override. String-backed so blank legacy/dashboard values cannot fail prompt validation.'}),
+                'scene_index': ('STRING', {'default': '0', 'multiline': False, 'tooltip': 'Resolved scene index override. String-backed so blank legacy/dashboard values cannot fail prompt validation.'}),
                 'prompt_file': ('STRING', {'default': '', 'multiline': False}),
                 'outfit_file': ('STRING', {'default': '', 'multiline': False}),
                 'scene_file': ('STRING', {'default': '', 'multiline': False}),
                 'saved_path': ('STRING', {'default': '', 'multiline': True, 'dynamicPrompts': False, 'tooltip': 'Read-only display of the most recent save path.'}),
             },
             'optional': {
+                # Keep the existing optional socket order intact for workflow compatibility.
+                'images': ('IMAGE', {'forceInput': True, 'tooltip': 'Decoded IMAGE input. Takes priority when connected.'}),
                 'generation_info': ('STRING', {'forceInput': True}),
                 'applied_loras': ('STRING', {'forceInput': True}),
+                'samples': ('LATENT', {'forceInput': True, 'tooltip': 'Optional latent samples. If images is not connected, Output Core decodes these with the VAE input before saving.'}),
+                'vae': ('VAE', {'forceInput': True, 'tooltip': 'VAE used to decode samples when saving directly from latents.'}),
             },
             'hidden': {
                 'prompt': 'PROMPT',
@@ -778,36 +878,96 @@ class SOOutputBuilderSave:
             }
         }
 
-    RETURN_TYPES = ('IMAGE', 'STRING', 'STRING', 'STRING')
-    RETURN_NAMES = ('images', 'save_path', 'subfolder', 'filename_prefix')
+    RETURN_TYPES = ('IMAGE',)
+    RETURN_NAMES = ('images',)
     FUNCTION = 'save_images'
     OUTPUT_NODE = True
-    CATEGORY = "Sick Ollie/Classic"
-    DESCRIPTION = 'Builds output folders and filenames from dropdown-selected variables, auto-detects upstream model resources, hashes them, and saves images with Comfy metadata plus Civitai-style parameters.'
+    CATEGORY = "Sick Ollie/Studio"
+    DESCRIPTION = 'Builds output folders and filenames, optionally decodes latent samples with a VAE, auto-detects upstream context/resources, and saves images with Comfy metadata plus Civitai-style parameters.'
     SEARCH_ALIASES = ['output builder', 'save with metadata', 'filename builder', 'civitai metadata save']
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
         return float('nan')
 
-    def save_images(self, images, output_root, subfolder_literal, subfolder_var_1, subfolder_var_2, subfolder_var_3, subfolder_var_4,
+    def save_images(self, output_root, subfolder_literal, subfolder_var_1, subfolder_var_2, subfolder_var_3, subfolder_var_4,
                     subfolder_delimiter, filename_literal, filename_var_1, filename_var_2, filename_var_3, filename_var_4, filename_var_5, filename_var_6,
                     filename_delimiter, extension, quality, counter_digits, save_prompt_json, save_workflow_json, save_civitai_parameters,
                     clean_name, raw_stem, model_name, seed, prompt_index, outfit_index, scene_index,
-                    prompt_file, outfit_file, scene_file, saved_path, generation_info='', applied_loras='',
+                    prompt_file, outfit_file, scene_file, saved_path, images=None, samples=None, vae=None, generation_info='', applied_loras='',
                     prompt=None, extra_pnginfo=None, unique_id=None):
+        # Output Core accepts either an already-decoded IMAGE or raw LATENT
+        # samples + VAE. IMAGE deliberately wins when both routes are connected
+        # so existing workflows remain deterministic.
+        output_images = images
+        input_mode = 'images'
+        if output_images is None:
+            if samples is None:
+                raise ValueError('Output Core needs either an images input or samples + vae inputs.')
+            if vae is None:
+                raise ValueError("Output Core received latent samples but no VAE. Connect Generation Core's vae output or provide decoded images instead.")
+            if not isinstance(samples, dict) or 'samples' not in samples:
+                raise TypeError('Output Core expected a Comfy LATENT object containing a samples tensor.')
+            output_images = vae.decode(samples['samples'])
+            # Some VAEs (including video-capable/Wan-style VAEs used by image
+            # models) return IMAGE data as [batch, frames, height, width, channels].
+            # Comfy's native VAEDecode flattens the first two dimensions so
+            # downstream IMAGE nodes always receive [batch, height, width, channels].
+            if torch.is_tensor(output_images) and output_images.ndim == 5:
+                output_images = output_images.reshape(
+                    -1,
+                    output_images.shape[-3],
+                    output_images.shape[-2],
+                    output_images.shape[-1],
+                )
+            input_mode = 'samples + vae'
+
+        runtime = _runtime_context(extra_pnginfo)
         auto_model_name_raw, auto_model_path = _auto_detect_base_model(extra_pnginfo, unique_id=unique_id)
-        resolved_model_name = str(model_name or '').strip() or (Path(auto_model_name_raw).stem if auto_model_name_raw else '')
-        context = _context_values(clean_name=clean_name, raw_stem=raw_stem, model_name=resolved_model_name, seed=seed,
-                                  prompt_index=prompt_index, outfit_index=outfit_index, scene_index=scene_index,
-                                  prompt_file=prompt_file, outfit_file=outfit_file, scene_file=scene_file)
+
+        clean_name = _prefer_runtime(runtime, 'clean_name', clean_name)
+        raw_stem = _prefer_runtime(runtime, 'raw_stem', raw_stem)
+        seed = _prefer_runtime(runtime, 'seed', seed)
+        prompt_index = _prefer_runtime(runtime, 'prompt_index', prompt_index)
+        outfit_index = _prefer_runtime(runtime, 'outfit_index', outfit_index)
+        scene_index = _prefer_runtime(runtime, 'scene_index', scene_index)
+        prompt_file = _prefer_runtime(runtime, 'prompt_file', prompt_file)
+        outfit_file = _prefer_runtime(runtime, 'outfit_file', outfit_file)
+        scene_file = _prefer_runtime(runtime, 'scene_file', scene_file)
+        main_folder = str(runtime.get('main_folder') or '')
+        main_trigger = str(runtime.get('main_trigger') or '')
+
+        resolved_model_name = (
+            str(runtime.get('model_name') or '').strip()
+            or str(model_name or '').strip()
+            or (Path(auto_model_name_raw).stem if auto_model_name_raw else '')
+        )
+        if not str(generation_info or '').strip() and runtime.get('generation_info'):
+            generation_info = json.dumps(runtime['generation_info'], ensure_ascii=False)
+        if not str(applied_loras or '').strip() and runtime.get('applied_loras'):
+            applied_loras = str(runtime['applied_loras'])
+
+        context = _context_values(
+            clean_name=clean_name, raw_stem=raw_stem, model_name=resolved_model_name,
+            main_folder=main_folder, main_trigger=main_trigger, seed=seed,
+            prompt_index=prompt_index, outfit_index=outfit_index, scene_index=scene_index,
+            prompt_file=prompt_file, outfit_file=outfit_file, scene_file=scene_file,
+        )
         resolved_values = {
             'clean_name': context.get('clean_name', ''),
             'raw_stem': context.get('raw_stem', ''),
             'model_name': context.get('model_name', ''),
+            'main_folder': context.get('main_folder', ''),
+            'main_trigger': context.get('main_trigger', ''),
+            'seed': context.get('seed', ''),
             'prompt_index': context.get('prompt_index', ''),
             'outfit_index': context.get('outfit_index', ''),
             'scene_index': context.get('scene_index', ''),
+            'prompt_file': str(prompt_file or ''),
+            'outfit_file': str(outfit_file or ''),
+            'scene_file': str(scene_file or ''),
+            'context_source': 'auto',
+            'input_mode': input_mode,
         }
         subfolder_name = _build_segment(subfolder_literal, subfolder_delimiter,
                                         [subfolder_var_1, subfolder_var_2, subfolder_var_3, subfolder_var_4], context)
@@ -819,9 +979,9 @@ class SOOutputBuilderSave:
         relative_prefix = '/'.join([part for part in [root_clean, subfolder_name, filename_prefix] if part])
 
         # Determine save path via Comfy's helper so numbering behavior matches the ecosystem.
-        image_batches = _normalize_image_batches(images)
+        image_batches = _normalize_image_batches(output_images)
         if not image_batches:
-            raise ValueError('No image data was provided to Output Builder + Save.')
+            raise ValueError('No image data was available to Output Core after resolving the selected input route.')
 
         first_pil = _tensor_to_pil(image_batches[0])
         width, height = first_pil.size
@@ -898,9 +1058,9 @@ class SOOutputBuilderSave:
                 'saved_path': [last_path],
                 'resolved_values': [resolved_values],
             },
-            'result': (images, last_path, subfolder_name, filename_prefix),
+            'result': (output_images,),
         }
 
 
-NODE_CLASS_MAPPINGS = {'SOOutputBuilderSave': SOOutputBuilderSave}
-NODE_DISPLAY_NAME_MAPPINGS = {'SOOutputBuilderSave': 'Output Core'}
+NODE_CLASS_MAPPINGS = {'SOOutputBuilderSaveStudio': SOOutputBuilderSave}
+NODE_DISPLAY_NAME_MAPPINGS = {'SOOutputBuilderSaveStudio': 'Output Core'}

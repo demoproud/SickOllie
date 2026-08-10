@@ -83,7 +83,7 @@ def _usable_log_lines(relative_path: str, category: str) -> list[str]:
 
 if PromptServer is not None and web is not None:
 
-    @PromptServer.instance.routes.get("/sickollie/prompt-core/log-lines")
+    @PromptServer.instance.routes.get("/sickollie/studio/prompt-core/log-lines")
     async def so_prompt_core_log_lines(request):
         category = str(request.rel_url.query.get("category", "prompt") or "prompt")
         relative_path = str(request.rel_url.query.get("file", NO_FILE) or NO_FILE)
@@ -196,10 +196,10 @@ class SOPromptLogEngine:
             "hidden": {"extra_pnginfo": "EXTRA_PNGINFO", "unique_id": "UNIQUE_ID"},
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING", "INT", "INT", "INT", "INT", "INT", "INT", "STRING", "STRING", "STRING")
-    RETURN_NAMES = ("final_prompt", "source_prompt", "prompt_line", "outfit_line", "scene_line", "prompt_index_resolved", "outfit_index_resolved", "scene_index_resolved", "prompt_count", "outfit_count", "scene_count", "prompt_file", "outfit_file", "scene_file")
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("final_prompt",)
     FUNCTION = "build_prompt"
-    CATEGORY = "Sick Ollie/Classic"
+    CATEGORY = "Sick Ollie/Studio"
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
@@ -378,24 +378,9 @@ class SOPromptLogEngine:
 
         return {
             "ui": {"resolved_prompt": [final_prompt]},
-            "result": (
-                final_prompt,
-                source_prompt,
-                prompt_line,
-                primary_line,
-                scene_line,
-                int(prompt_index_resolved),
-                int(primary_index),
-                int(scene_index_resolved),
-                int(prompt_count),
-                int(primary_count),
-                int(scene_count),
-                str(prompt_log_file),
-                str(primary_file),
-                str(scene_log_file),
-            ),
+            "result": (final_prompt,),
         }
 
 
-NODE_CLASS_MAPPINGS = {"SOPromptLogEngine": SOPromptLogEngine}
-NODE_DISPLAY_NAME_MAPPINGS = {"SOPromptLogEngine": "Prompt Core"}
+NODE_CLASS_MAPPINGS = {"SOPromptLogEngineStudio": SOPromptLogEngine}
+NODE_DISPLAY_NAME_MAPPINGS = {"SOPromptLogEngineStudio": "Prompt Core"}
