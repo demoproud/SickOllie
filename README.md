@@ -416,7 +416,6 @@ It can:
 - preview and safely remove only still-empty folders
 
 
-
 Existing grouped folders remain untouched unless **Reprocess Existing Subfolders** is enabled. See [the focused Log Organizer guide](docs/organizers/SOLO-Log-Organizer.md) for the current classification and recovery behavior.
 
 ## Where SICK OLLIE stores data
