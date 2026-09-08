@@ -167,7 +167,7 @@ function installPreviewCore(node) {
         ctx.clip();
 
         const backgroundMode = widgetValue(this, "background_mode", "Solid");
-        const backgroundColor = widgetValue(this, "background_color", "#111111");
+        const backgroundColor = widgetValue(this, "background_color", "#08070c");
 
         if (backgroundMode === "Checkerboard") {
             drawChecker(ctx, x, y, width, height);

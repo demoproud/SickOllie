@@ -1,7 +1,7 @@
 import { app } from "../../../scripts/app.js";
 
 const TARGET = "SOPromptLogEngine";
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 12;
 const NO_FILE = "[None]";
 const LARGE_RANDOM_MAX = 1000000000;
 const MODES = ["fixed", "increment", "decrement", "randomize", "shuffle"];
@@ -47,6 +47,33 @@ const DEFAULTS = {
 };
 
 const CANONICAL_NAMES = Object.keys(DEFAULTS);
+
+function canonicalCreativeLibraryLogReference(value, category = "") {
+    const clean = String(value ?? "").trim().replaceAll("\\", "/");
+    if (!clean || clean === NO_FILE) return clean;
+    const parts = clean.split("/");
+    const inferred = { prompts: "prompt", outfits: "outfit", scenes: "scene" }[String(parts[0] || "").toLowerCase()] || "";
+    const kind = String(category || inferred).toLowerCase();
+    if (parts.length < 2 || String(parts[1]).toLowerCase() !== "recipe library") return clean;
+    parts[1] = "Creative Library";
+    if (kind === "prompt" && String(parts[2] || "").toLowerCase() === "master - all recipe prompts.txt") parts[2] = "MASTER - Saved Recipe Prompts.txt";
+    else if (kind === "prompt" && String(parts[2] || "").toLowerCase() === "collections") parts[2] = "Saved Recipe Collections";
+    else if (kind === "outfit" && String(parts[2] || "").toLowerCase() === "master - resolved recipe outfits.txt") parts[2] = "MASTER - Outfit Looks.txt";
+    else if (kind === "scene" && String(parts[2] || "").toLowerCase() === "master - resolved recipe scenes.txt") parts[2] = "MASTER - Scenes.txt";
+    return parts.join("/");
+}
+
+function canonicalizeLogWidgetValues(values) {
+    const output = [...values];
+    for (const [name, category] of [
+        ["prompt_log_file", "prompt"], ["outfit_log_file_A", "outfit"], ["outfit_log_file_B", "outfit"],
+        ["outfit_log_file_C", "outfit"], ["scene_log_file", "scene"],
+    ]) {
+        const index = CANONICAL_NAMES.indexOf(name);
+        if (index >= 0) output[index] = canonicalCreativeLibraryLogReference(output[index], category);
+    }
+    return output;
+}
 
 const COPY_BUTTONS = [
     ["outfit_A", "outfit_token_A", "OUTFIT_A"],
@@ -99,6 +126,21 @@ function canonicalValues(overrides = {}) {
     );
 }
 
+function workflowInputConnected(info, name) {
+    const input = (info?.inputs || []).find((slot) => String(slot?.widget?.name ?? slot?.name ?? "") === String(name));
+    return Boolean(input && (input.link != null || (Array.isArray(input.links) && input.links.length)));
+}
+
+function upgradeDedicatedPromptInputSource(info, widgetsValues) {
+    const output = [...widgetsValues];
+    const sourceIndex = CANONICAL_NAMES.indexOf("prompt_source");
+    const previousSchema = Number(info?.properties?.so_prompt_core_schema_version || 0);
+    if (previousSchema < 12 && sourceIndex >= 0 && String(output[sourceIndex] ?? "manual") === "manual" && workflowInputConnected(info, "manual_prompt_input")) {
+        output[sourceIndex] = "input";
+    }
+    return output;
+}
+
 function withSchema(info, widgetsValues) {
     return {
         ...info,
@@ -106,7 +148,7 @@ function withSchema(info, widgetsValues) {
             ...(info?.properties || {}),
             so_prompt_core_schema_version: SCHEMA_VERSION,
         },
-        widgets_values: widgetsValues,
+        widgets_values: canonicalizeLogWidgetValues(upgradeDedicatedPromptInputSource(info, widgetsValues)),
     };
 }
 
@@ -521,20 +563,29 @@ async function refreshStreamLines(node, base, force = false) {
 }
 
 function activeSourceTemplate(node) {
-    if (String(widget(node, "prompt_source")?.value ?? "manual") !== "log") {
-        return String(widget(node, "manual_prompt")?.value ?? "");
-    }
+    const source = String(widget(node, "prompt_source")?.value ?? "manual");
+    if (source === "input") return String(node?.properties?.so_external_manual_prompt_value ?? "");
+    if (source !== "log") return String(widget(node, "manual_prompt")?.value ?? "");
     const lines = node.__soLogLines?.prompt || [];
     if (!lines.length) return "";
     const index = normalizedIndex(widget(node, "prompt_index")?.value, lines.length);
     return String(lines[index] ?? "");
 }
 
+function activeAssembledTemplate(node) {
+    const separator = String(widget(node, "prefix_suffix_separator")?.value ?? ", ");
+    return [
+        Boolean(widget(node, "prefix_enabled")?.value) ? String(widget(node, "prefix_text")?.value ?? "") : "",
+        activeSourceTemplate(node),
+        Boolean(widget(node, "suffix_enabled")?.value) ? String(widget(node, "suffix_text")?.value ?? "") : "",
+    ].map((part) => String(part ?? "").trim()).filter(Boolean).join(separator);
+}
+
 function shuffleStreamIsUsed(node, base) {
     if (base === "prompt") return String(widget(node, "prompt_source")?.value ?? "manual") === "log";
     const tokenWidget = streamTokenWidget(base);
     const token = String(widget(node, tokenWidget)?.value ?? "");
-    return Boolean(token) && activeSourceTemplate(node).includes(token);
+    return Boolean(token) && activeAssembledTemplate(node).includes(token);
 }
 
 function previewChoice(index, line) {

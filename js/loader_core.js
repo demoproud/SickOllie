@@ -568,6 +568,13 @@ function displayTriggerValue(value) {
     return text.length ? text : "none";
 }
 
+function mainLoraTriggerActive(node) {
+    const selected = String(widget(node, "main_lora")?.value ?? NONE).trim();
+    const enabled = Boolean(widget(node, "main_enabled")?.value);
+    const strength = Number(widget(node, "main_strength")?.value ?? 0);
+    return enabled && Boolean(selected) && selected !== NONE && Number.isFinite(strength) && strength !== 0;
+}
+
 async function fetchMainTriggerFromServer(mainValue) {
     const value = String(mainValue ?? "").trim();
     if (!value || value === NONE) {
@@ -652,7 +659,9 @@ async function refreshMainTrigger(node, force = false) {
     node.__soMainTrigger = "";
     node.__soMainTriggerSource = "";
 
-    if (!mainValue || mainValue === NONE) {
+    // A selected-but-disabled Main LoRA is not active, so it must not expose
+    // an activation trigger to downstream prompt logic or the copy action.
+    if (!mainLoraTriggerActive(node)) {
         updateTriggerButton(node);
         return "";
     }
@@ -1515,6 +1524,19 @@ app.registerExtension({
                         );
                     } finally {
                         refreshCleanNameChoices(this);
+                        refreshMainTrigger(this, false);
+                    }
+                };
+            }
+
+            for (const name of ["main_enabled", "main_strength"]) {
+                const activeWidget = widget(this, name);
+                if (!activeWidget) continue;
+                const originalActiveCallback = activeWidget.callback;
+                activeWidget.callback = (value) => {
+                    try {
+                        originalActiveCallback?.call(activeWidget, value);
+                    } finally {
                         refreshMainTrigger(this, false);
                     }
                 };

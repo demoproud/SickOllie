@@ -10,8 +10,8 @@ const ASSETS = {
     icons: {
         "library-review": new URL("./solo_hub_assets/LoRALibrary.png", import.meta.url).href,
         recipes: new URL("./solo_hub_assets/RecipeLibrary.png", import.meta.url).href,
+        "outfit-forge": new URL("./solo_hub_assets/RecipeCatalog.png", import.meta.url).href,
         "lora-organizer": new URL("./solo_hub_assets/LoRAOrganizer.png", import.meta.url).href,
-        "log-organizer": new URL("./solo_hub_assets/LogOrganizer.png", import.meta.url).href,
     },
 };
 
@@ -28,17 +28,17 @@ const TOOL_THEME = {
         rgb: "255,66,189",
         eyebrow: "SAVE + RECALL",
     },
-    "lora-organizer": {
+    "outfit-forge": {
         order: 2,
+        accent: "#ff42bd",
+        rgb: "255,66,189",
+        eyebrow: "DESIGN + GENERATE",
+    },
+    "lora-organizer": {
+        order: 3,
         accent: "#fff04d",
         rgb: "255,240,77",
         eyebrow: "CLEAN + ORGANIZE",
-    },
-    "log-organizer": {
-        order: 3,
-        accent: "#68ff92",
-        rgb: "104,255,146",
-        eyebrow: "SORT + POLISH",
     },
 };
 
@@ -419,7 +419,7 @@ function hub() {
 
         const copy = document.createElement("p");
         copy.className = "so-hub__copy";
-        copy.textContent = "Library, organization, review, and recipe tools in one neon little command center.";
+        copy.textContent = "Browse LoRAs, assemble visual ideas, and organize the things you actually create with.";
         decorateSidebarTab();
 
         const rule = document.createElement("div");

@@ -7,6 +7,11 @@ from typing import Any
 import folder_paths
 
 try:
+    from .creative_library_paths import canonical_log_reference
+except ImportError:  # Direct-module loading used by local validators and some ComfyUI setups.
+    from creative_library_paths import canonical_log_reference
+
+try:
     from aiohttp import web
     from server import PromptServer
 except Exception:  # pragma: no cover - unavailable outside ComfyUI runtime
@@ -15,6 +20,7 @@ except Exception:  # pragma: no cover - unavailable outside ComfyUI runtime
 
 NO_FILE = "[None]"
 PROMPT_SOURCES = ["manual", "log"]
+MAIN_PROMPT_SOURCES = ["manual", "input", "log"]
 INDEX_MODES = ["fixed", "increment", "decrement", "randomize", "shuffle"]
 PLACEMENT_MODES = ["smart", "token", "append", "prepend", "off"]
 DEFAULT_CLEANUP_RULES = r"""\?\[|\]
@@ -22,6 +28,118 @@ DEFAULT_CLEANUP_RULES = r"""\?\[|\]
 :\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)"""
 LOG_ROOT_NAME = "SickOllieLogs"
 LOG_CATEGORIES = {"prompt": "prompts", "outfit": "outfits", "scene": "scenes"}
+OUTFIT_COLLECTION_SCOPE_PREFIX = "[Outfit Looks Collection:"
+WARDROBE_COLLECTION_SCOPE_PREFIX = "[Wardrobe Collection:"
+SCENE_COLLECTION_SCOPE_PREFIX = "[Scene Collection:"
+
+
+def _collection_catalog():
+    """Return the Creative Library catalog without making Prompt Core depend on import order."""
+    try:
+        from .solo_catalog import get_catalog
+    except ImportError:  # Direct-module loading used by local validators.
+        try:
+            from solo_catalog import get_catalog
+        except ImportError:
+            return None
+    try:
+        return get_catalog()
+    except Exception:
+        return None
+
+
+def _collection_scope_value(source: str, collection_id: str) -> str:
+    clean_source = str(source or "").strip().lower()
+    clean_id = str(collection_id or "").strip()
+    prefix = {
+        "outfit": OUTFIT_COLLECTION_SCOPE_PREFIX,
+        "wardrobe": WARDROBE_COLLECTION_SCOPE_PREFIX,
+        "scene": SCENE_COLLECTION_SCOPE_PREFIX,
+    }.get(clean_source, "")
+    return f"{prefix}{clean_id}]" if prefix and clean_id else ""
+
+
+def _collection_scope_source_id(value: str) -> tuple[str, str]:
+    text = str(value or "").strip()
+    for source, prefix in (
+        ("outfit", OUTFIT_COLLECTION_SCOPE_PREFIX),
+        ("wardrobe", WARDROBE_COLLECTION_SCOPE_PREFIX),
+        ("scene", SCENE_COLLECTION_SCOPE_PREFIX),
+    ):
+        if text.startswith(prefix) and text.endswith("]"):
+            return source, text[len(prefix):-1].strip()
+    return "", ""
+
+
+def _collection_scope_records(category: str) -> list[dict[str, Any]]:
+    """Expose shareable Creative Library collections as stable virtual logs.
+
+    Outfit slots accept both Outfit Looks collections and raw Wardrobe
+    collections.  Scene slots accept Scene collections.  The stored value uses
+    the collection's stable ID, so renaming a collection does not break saved
+    workflows.
+    """
+    clean_category = str(category or "").strip().lower()
+    if clean_category not in {"outfit", "scene"}:
+        return []
+    catalog = _collection_catalog()
+    if catalog is None:
+        return []
+    sources = ("outfit", "wardrobe") if clean_category == "outfit" else ("scene",)
+    output: list[dict[str, Any]] = []
+    for source in sources:
+        try:
+            rows = catalog.library_collections(source)
+        except Exception:
+            continue
+        for row in rows:
+            collection_id = str(row.get("collection_id") or "").strip()
+            reference = _collection_scope_value(source, collection_id)
+            if not reference:
+                continue
+            output.append({
+                "reference": reference,
+                "collection_id": collection_id,
+                "name": str(row.get("name") or "Collection"),
+                "source": source,
+                "asset_count": max(0, int(row.get("asset_count") or 0)),
+            })
+    return output
+
+
+def _collection_scope_lines(relative_path: str, category: str) -> list[str] | None:
+    """Resolve a virtual collection reference; return None for normal files."""
+    source, collection_id = _collection_scope_source_id(relative_path)
+    if not source:
+        return None
+    clean_category = str(category or "").strip().lower()
+    if (clean_category == "outfit" and source not in {"outfit", "wardrobe"}) or (
+        clean_category == "scene" and source != "scene"
+    ) or clean_category not in {"outfit", "scene"}:
+        return []
+    catalog = _collection_catalog()
+    if catalog is None:
+        return []
+    try:
+        collection = next(
+            (row for row in catalog.library_collections(source) if str(row.get("collection_id") or "") == collection_id),
+            None,
+        )
+        if not collection:
+            return []
+        member_ids = [str(value) for value in (collection.get("asset_ids") or []) if str(value)]
+        if not member_ids:
+            return []
+        if source == "wardrobe":
+            rows = catalog.wardrobe_items()
+            id_key = "wardrobe_id"
+        else:
+            rows = catalog.recipe_components(source)
+            id_key = "component_id"
+        by_id = {str(row.get(id_key) or ""): str(row.get("value") or "").strip() for row in rows}
+        return [by_id[member_id] for member_id in member_ids if by_id.get(member_id)]
+    except Exception:
+        return []
 
 
 def _log_root() -> Path:
@@ -38,6 +156,15 @@ def _ensure_log_directories() -> Path:
 def _category_choices(category: str) -> list[str]:
     root = _ensure_log_directories()
     category_root = root / LOG_CATEGORIES[category]
+    if category == "prompt":
+        try:
+            from .solo_recipe_catalog import _sync_library_if_stale
+            _sync_library_if_stale()
+        except Exception:
+            pass
+        catalog_roots = [category_root / "Creative Library" / name for name in ("Prompts", "Templates")]
+        if any(path.exists() for path in catalog_roots):
+            category_root = category_root / "Creative Library"
     values = []
     for file_path in category_root.rglob("*.txt"):
         if file_path.is_file():
@@ -45,11 +172,12 @@ def _category_choices(category: str) -> list[str]:
                 values.append(file_path.relative_to(root).as_posix())
             except ValueError:
                 pass
-    return [NO_FILE] + sorted(set(values), key=str.lower)
+    collection_values = [row["reference"] for row in _collection_scope_records(category)]
+    return [NO_FILE] + collection_values + sorted(set(values), key=str.lower)
 
 
 def _resolve_log_path(relative_path: str, category: str) -> Path | None:
-    value = str(relative_path or "").strip().replace("\\", "/")
+    value = canonical_log_reference(relative_path, category)
     if not value or value == NO_FILE:
         return None
     relative = Path(value)
@@ -76,6 +204,9 @@ def _read_text_file(path: Path) -> str:
 
 
 def _usable_log_lines(relative_path: str, category: str) -> list[str]:
+    collection_lines = _collection_scope_lines(relative_path, category)
+    if collection_lines is not None:
+        return collection_lines
     path = _resolve_log_path(relative_path, category)
     if path is None or not path.exists() or not path.is_file():
         return []
@@ -92,6 +223,17 @@ if PromptServer is not None and web is not None:
             return web.json_response({"ok": False, "error": "Invalid log category", "lines": [], "count": 0}, status=400)
         lines = _usable_log_lines(relative_path, category)
         return web.json_response({"ok": True, "lines": lines, "count": len(lines)})
+
+    @PromptServer.instance.routes.get("/sickollie/studio/prompt-core/log-files")
+    async def so_prompt_core_log_files(request):
+        category = str(request.rel_url.query.get("category", "prompt") or "prompt")
+        if category not in LOG_CATEGORIES:
+            return web.json_response({"ok": False, "error": "Invalid log category", "files": []}, status=400)
+        return web.json_response({
+            "ok": True,
+            "files": _category_choices(category),
+            "collections": _collection_scope_records(category),
+        })
 
 
 def _load_line(relative_path: str, category: str, index_value: int):
@@ -250,7 +392,7 @@ class SOPromptLogEngine:
         int_widget = {"default": 0, "min": -2147483648, "max": 2147483647, "step": 1}
         return {
             "required": {
-                "prompt_source": (PROMPT_SOURCES, {"default": "manual"}),
+                "prompt_source": (MAIN_PROMPT_SOURCES, {"default": "manual"}),
                 "manual_prompt": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": False}),
                 "prompt_log_file": (prompt_files, {"default": NO_FILE}),
                 "prompt_mode": (INDEX_MODES, {"default": "increment"}),
@@ -290,8 +432,19 @@ class SOPromptLogEngine:
                 "trigger_token": ("STRING", {"default": "TRIGGER", "multiline": False}),
                 "trigger_placement": (PLACEMENT_MODES, {"default": "off"}),
                 "trigger_override": ("STRING", {"default": "", "multiline": False}),
+                "outfit_source_A": (PROMPT_SOURCES, {"default": "log"}),
+                "outfit_manual_A": ("STRING", {"default": "", "multiline": False}),
+                "outfit_source_B": (PROMPT_SOURCES, {"default": "log"}),
+                "outfit_manual_B": ("STRING", {"default": "", "multiline": False}),
+                "outfit_source_C": (PROMPT_SOURCES, {"default": "log"}),
+                "outfit_manual_C": ("STRING", {"default": "", "multiline": False}),
+                "scene_source": (PROMPT_SOURCES, {"default": "log"}),
+                "scene_manual": ("STRING", {"default": "", "multiline": False}),
             },
-            "optional": {"main_trigger": ("STRING", {"forceInput": True})},
+            "optional": {
+                "main_trigger": ("STRING", {"forceInput": True}),
+                "manual_prompt_input": ("STRING", {"forceInput": True}),
+            },
             "hidden": {"extra_pnginfo": "EXTRA_PNGINFO", "unique_id": "UNIQUE_ID"},
         }
 
@@ -346,20 +499,63 @@ class SOPromptLogEngine:
         trigger_token="TRIGGER",
         trigger_placement="off",
         trigger_override="",
+        outfit_source_A="log",
+        outfit_manual_A="",
+        outfit_source_B="log",
+        outfit_manual_B="",
+        outfit_source_C="log",
+        outfit_manual_C="",
+        scene_source="log",
+        scene_manual="",
         main_trigger="",
+        manual_prompt_input=None,
         extra_pnginfo=None,
         unique_id=None,
     ):
         prompt_line, prompt_index_resolved, prompt_count = _load_line(prompt_log_file, "prompt", prompt_index)
-        outfit_A, outfit_index_A_resolved, outfit_count_A = _load_line(outfit_log_file_A, "outfit", outfit_index_A)
-        outfit_B, outfit_index_B_resolved, outfit_count_B = _load_line(outfit_log_file_B, "outfit", outfit_index_B)
-        outfit_C, outfit_index_C_resolved, outfit_count_C = _load_line(outfit_log_file_C, "outfit", outfit_index_C)
-        scene_line, scene_index_resolved, scene_count = _load_line(scene_log_file, "scene", scene_index)
+        outfit_A_log, outfit_index_A_resolved, outfit_count_A = _load_line(outfit_log_file_A, "outfit", outfit_index_A)
+        outfit_B_log, outfit_index_B_resolved, outfit_count_B = _load_line(outfit_log_file_B, "outfit", outfit_index_B)
+        outfit_C_log, outfit_index_C_resolved, outfit_count_C = _load_line(outfit_log_file_C, "outfit", outfit_index_C)
+        scene_log_line, scene_index_resolved, scene_count = _load_line(scene_log_file, "scene", scene_index)
 
-        source_prompt = prompt_line if str(prompt_source) == "log" else str(manual_prompt)
+        outfit_source_A = "manual" if str(outfit_source_A).lower() == "manual" else "log"
+        outfit_source_B = "manual" if str(outfit_source_B).lower() == "manual" else "log"
+        outfit_source_C = "manual" if str(outfit_source_C).lower() == "manual" else "log"
+        scene_source = "manual" if str(scene_source).lower() == "manual" else "log"
+        outfit_A = str(outfit_manual_A) if outfit_source_A == "manual" else outfit_A_log
+        outfit_B = str(outfit_manual_B) if outfit_source_B == "manual" else outfit_B_log
+        outfit_C = str(outfit_manual_C) if outfit_source_C == "manual" else outfit_C_log
+        scene_line = str(scene_manual) if scene_source == "manual" else scene_log_line
+        if outfit_source_A == "manual": outfit_index_A_resolved, outfit_count_A = 0, 0
+        if outfit_source_B == "manual": outfit_index_B_resolved, outfit_count_B = 0, 0
+        if outfit_source_C == "manual": outfit_index_C_resolved, outfit_count_C = 0, 0
+        if scene_source == "manual": scene_index_resolved, scene_count = 0, 0
 
-        prompt_log_used = str(prompt_source) == "log" and bool(prompt_line)
-        assembled = source_prompt
+        selected_prompt_source = str(prompt_source or "manual").strip().lower()
+        if selected_prompt_source not in {"manual", "input", "log"}:
+            selected_prompt_source = "manual"
+        external_prompt_available = manual_prompt_input is not None
+        external_prompt_value = "" if manual_prompt_input is None else str(manual_prompt_input)
+        effective_prompt_source = selected_prompt_source
+        effective_manual_prompt = str(manual_prompt)
+        if effective_prompt_source == "log":
+            source_prompt = prompt_line
+        elif effective_prompt_source == "input":
+            source_prompt = external_prompt_value if external_prompt_available else ""
+        else:
+            source_prompt = effective_manual_prompt
+
+        prompt_log_used = effective_prompt_source == "log" and bool(prompt_line)
+        # Prefix / suffix can intentionally provide portable placeholders when a
+        # source Prompt Log is read-only. Resolve the complete assembled template
+        # so NAME / OUTFIT / SCENE / TRIGGER behave identically regardless of
+        # whether the token originated in the log, manual field, prefix, or suffix.
+        assembled = _join_prompt_parts(
+            prefix_suffix_separator,
+            prefix_text if prefix_enabled else "",
+            source_prompt,
+            suffix_text if suffix_enabled else "",
+        )
         prepended_components: list[str] = []
         appended_components: list[str] = []
         component_results: dict[str, dict[str, Any]] = {}
@@ -484,17 +680,12 @@ class SOPromptLogEngine:
         outfit_c_used = bool(component_results["outfit_c"]["used"])
         scene_used = bool(component_results["scene"]["used"])
 
-        assembled = _join_prompt_parts(
-            prefix_suffix_separator,
-            prefix_text if prefix_enabled else "",
-            assembled,
-            suffix_text if suffix_enabled else "",
-        )
         final_prompt = _apply_cleanup_rules(assembled, cleanup_rules) if cleanup_enabled else assembled.strip()
 
-        def _log_meta(result, file_name, index, count, line):
+        def _component_meta(result, source, file_name, index, count, line):
             data = {
                 "used": bool(result.get("used")),
+                "source": str(source),
                 "placement": str(result.get("placement", "token")),
                 "action": str(result.get("action", "waiting")),
                 "token": str(result.get("token", "")),
@@ -504,12 +695,20 @@ class SOPromptLogEngine:
                 data["file"] = str(file_name)
                 data["count"] = int(count)
             if result.get("used"):
-                data["index"] = int(index)
                 data["line"] = str(line)
+                if str(source) == "log":
+                    data["index"] = int(index)
+                else:
+                    data["manual_value"] = str(line)
             return data
 
+        outfit_file_A = outfit_log_file_A if outfit_source_A == "log" else NO_FILE
+        outfit_file_B = outfit_log_file_B if outfit_source_B == "log" else NO_FILE
+        outfit_file_C = outfit_log_file_C if outfit_source_C == "log" else NO_FILE
+        scene_file = scene_log_file if scene_source == "log" else NO_FILE
+
         resolved_metadata = {
-            "schema_version": 4,
+            "schema_version": 6,
             "final_prompt": final_prompt,
             "source_prompt": source_prompt,
             "prompt": ({
@@ -518,14 +717,19 @@ class SOPromptLogEngine:
                 "index": int(prompt_index_resolved),
                 "count": int(prompt_count),
                 "line": prompt_line,
-            } if prompt_log_used else {
+            } if prompt_log_used else ({
+                "source": "input",
+                "input_prompt": source_prompt,
+                "external_input": external_prompt_available,
+            } if effective_prompt_source == "input" else {
                 "source": "manual",
-                "manual_prompt": str(manual_prompt),
-            }),
-            "outfit_a": _log_meta(component_results["outfit_a"], outfit_log_file_A, outfit_index_A_resolved, outfit_count_A, outfit_A),
-            "outfit_b": _log_meta(component_results["outfit_b"], outfit_log_file_B, outfit_index_B_resolved, outfit_count_B, outfit_B),
-            "outfit_c": _log_meta(component_results["outfit_c"], outfit_log_file_C, outfit_index_C_resolved, outfit_count_C, outfit_C),
-            "scene": _log_meta(component_results["scene"], scene_log_file, scene_index_resolved, scene_count, scene_line),
+                "manual_prompt": effective_manual_prompt,
+                "external_input": False,
+            })),
+            "outfit_a": _component_meta(component_results["outfit_a"], outfit_source_A, outfit_file_A, outfit_index_A_resolved, outfit_count_A, outfit_A),
+            "outfit_b": _component_meta(component_results["outfit_b"], outfit_source_B, outfit_file_B, outfit_index_B_resolved, outfit_count_B, outfit_B),
+            "outfit_c": _component_meta(component_results["outfit_c"], outfit_source_C, outfit_file_C, outfit_index_C_resolved, outfit_count_C, outfit_C),
+            "scene": _component_meta(component_results["scene"], scene_source, scene_file, scene_index_resolved, scene_count, scene_line),
             "trigger": component_results["trigger"],
             "name": {"used": name_used, "token": str(name_token), "value": str(name_value), "matched_tokens": name_matches},
             "item": {"used": item_used, "token": str(item_token), "value": str(item_value), "matched_tokens": item_matches},
@@ -554,27 +758,39 @@ class SOPromptLogEngine:
             extra["so_prompt_file"] = str(prompt_log_file) if prompt_log_used else ""
             extra["so_prompt_index_resolved"] = int(prompt_index_resolved) if prompt_log_used else None
             extra["so_prompt_count"] = int(prompt_count) if prompt_log_used else 0
-            extra["so_outfit_a_file"] = str(outfit_log_file_A) if outfit_a_used else ""
-            extra["so_outfit_a_index_resolved"] = int(outfit_index_A_resolved) if outfit_a_used else None
-            extra["so_outfit_a_count"] = int(outfit_count_A) if outfit_a_used else 0
-            extra["so_outfit_b_file"] = str(outfit_log_file_B) if outfit_b_used else ""
-            extra["so_outfit_b_index_resolved"] = int(outfit_index_B_resolved) if outfit_b_used else None
-            extra["so_outfit_b_count"] = int(outfit_count_B) if outfit_b_used else 0
-            extra["so_outfit_c_file"] = str(outfit_log_file_C) if outfit_c_used else ""
-            extra["so_outfit_c_index_resolved"] = int(outfit_index_C_resolved) if outfit_c_used else None
-            extra["so_outfit_c_count"] = int(outfit_count_C) if outfit_c_used else 0
-            extra["so_scene_file"] = str(scene_log_file) if scene_used else ""
-            extra["so_scene_index_resolved"] = int(scene_index_resolved) if scene_used else None
-            extra["so_scene_count"] = int(scene_count) if scene_used else 0
+            extra["so_outfit_a_file"] = str(outfit_file_A) if outfit_a_used and outfit_source_A == "log" else ""
+            extra["so_outfit_a_index_resolved"] = int(outfit_index_A_resolved) if outfit_a_used and outfit_source_A == "log" else None
+            extra["so_outfit_a_count"] = int(outfit_count_A) if outfit_a_used and outfit_source_A == "log" else 0
+            extra["so_outfit_b_file"] = str(outfit_file_B) if outfit_b_used and outfit_source_B == "log" else ""
+            extra["so_outfit_b_index_resolved"] = int(outfit_index_B_resolved) if outfit_b_used and outfit_source_B == "log" else None
+            extra["so_outfit_b_count"] = int(outfit_count_B) if outfit_b_used and outfit_source_B == "log" else 0
+            extra["so_outfit_c_file"] = str(outfit_file_C) if outfit_c_used and outfit_source_C == "log" else ""
+            extra["so_outfit_c_index_resolved"] = int(outfit_index_C_resolved) if outfit_c_used and outfit_source_C == "log" else None
+            extra["so_outfit_c_count"] = int(outfit_count_C) if outfit_c_used and outfit_source_C == "log" else 0
+            extra["so_scene_file"] = str(scene_file) if scene_used and scene_source == "log" else ""
+            extra["so_scene_index_resolved"] = int(scene_index_resolved) if scene_used and scene_source == "log" else None
+            extra["so_scene_count"] = int(scene_count) if scene_used and scene_source == "log" else 0
             workflow = extra.get("workflow")
             if isinstance(workflow, dict):
                 node = _find_workflow_node(workflow, unique_id)
                 if node:
+                    runtime_source = effective_prompt_source
+                    runtime_manual_prompt = str(manual_prompt)
+                    widgets_values = node.get("widgets_values")
+                    if isinstance(widgets_values, list) and len(widgets_values) >= 2:
+                        # The workflow snapshot embedded in the generated image must
+                        # describe the prompt that actually ran, not a stale draft
+                        # that happened to be visible before a Library queue override.
+                        widgets_values[0] = runtime_source
+                        widgets_values[1] = runtime_manual_prompt
                     props = node.setdefault("properties", {})
                     props.update({
-                        "so_prompt_core_schema_version": 12,
+                        "so_prompt_core_schema_version": 16,
                         "so_saved_final_prompt": final_prompt,
                         "so_saved_source_prompt": source_prompt,
+                        "so_runtime_prompt_source": runtime_source,
+                        "so_runtime_manual_prompt": runtime_manual_prompt,
+                        "so_external_manual_prompt_value": source_prompt if effective_prompt_source == "input" else props.get("so_external_manual_prompt_value", ""),
                         "so_saved_prompt_line": prompt_line if prompt_log_used else "",
                         "so_saved_outfit_line": outfit_A if outfit_a_used else "",
                         "so_saved_outfit_line_B": outfit_B if outfit_b_used else "",
@@ -583,11 +799,11 @@ class SOPromptLogEngine:
                         "so_last_assembly_status": resolved_metadata,
                     })
 
-        primary_line, primary_index, primary_count, primary_file = outfit_A, outfit_index_A_resolved, outfit_count_A, outfit_log_file_A
+        primary_line, primary_index, primary_count, primary_file = outfit_A, outfit_index_A_resolved, outfit_count_A, outfit_file_A
         if not primary_count and outfit_count_B:
-            primary_line, primary_index, primary_count, primary_file = outfit_B, outfit_index_B_resolved, outfit_count_B, outfit_log_file_B
+            primary_line, primary_index, primary_count, primary_file = outfit_B, outfit_index_B_resolved, outfit_count_B, outfit_file_B
         elif not primary_count and outfit_count_C:
-            primary_line, primary_index, primary_count, primary_file = outfit_C, outfit_index_C_resolved, outfit_count_C, outfit_log_file_C
+            primary_line, primary_index, primary_count, primary_file = outfit_C, outfit_index_C_resolved, outfit_count_C, outfit_file_C
 
         return {
             "ui": {

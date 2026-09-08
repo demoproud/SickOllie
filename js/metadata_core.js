@@ -190,7 +190,7 @@ async function clearTempOnServer(token) {
     }
 }
 
-async function clearLoadedImage(node, deleteTemp = true) {
+async function clearLoadedImage(node, deleteTemp = false) {
     const previous = currentImageToken(node);
     node.__soMetadataRequest = Symbol("metadata_clear");
     setImageToken(node, "[None]");
@@ -236,11 +236,9 @@ async function uploadTempFile(node, file) {
 
     const requestToken = Symbol("metadata_upload");
     node.__soMetadataRequest = requestToken;
-    const previous = currentImageToken(node);
     const form = new FormData();
-    // Append the old temp token first so the server can safely dispose of it
-    // after the new image has been validated.
-    form.append("previous_token", previous);
+    // Keep older temp sources on disk because queued workflows may still
+    // reference them after the user moves on to inspect another image.
     form.append("file", file, file.name);
 
     try {
@@ -285,7 +283,7 @@ function makeUploadButton(node) {
 
 function makeClearButton(node) {
     if (node.__soClearButton) return node.__soClearButton;
-    const button = node.addWidget("button", "Clear loaded image", null, () => clearLoadedImage(node, true), { serialize: false });
+    const button = node.addWidget("button", "Clear loaded image", null, () => clearLoadedImage(node, false), { serialize: false });
     button.serialize = false;
     button.options = { ...(button.options || {}), serialize: false };
     node.__soClearButton = button;

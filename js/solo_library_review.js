@@ -1,6 +1,7 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import { registerSoloHubItem } from "./solo_hub.js";
+import { recoverTextInputFocus } from "./text_input_focus_guard.js";
 const LIBRARY_HEADER_URL = new URL("./solo_hub_assets/LoRALibraryHeader.png", import.meta.url).href;
 const LIBRARY_BACKGROUND_URL = new URL("./solo_hub_assets/LoRALibraryBackground.webp", import.meta.url).href;
 
@@ -10,13 +11,30 @@ const ALL_FOLDERS = "[All folders]";
 const LOADER_TYPES = ["SOLoaderCoreEngineStudio", "SOLoaderCoreEngine"];
 const PROMPT_TYPE = "SOPromptLogEngineStudio";
 const GENERATION_TYPE = "SOGenerationPipelineStudio";
+const OUTPUT_TYPE = "SOOutputBuilderSaveStudio";
+const LORA_YEARBOOK_OUTPUT_ROOT = "Sick Ollie Yearbooks/LoRA Library";
 const AUTO_FIRST_KEY = "sickollie.library.autoFirstImage";
 const YEARBOOK_PROMPT_KEY = "sickollie.library.yearbookPrompt";
 const DEFAULT_YEARBOOK_PROMPT = "A clean yearbook portrait of NAME, centered head and shoulders, looking directly at the camera, calm natural expression, simple neutral background, even soft studio light, consistent framing.";
+const YEARBOOK_DEFAULT_STRENGTH = 1.0;
+const YEARBOOK_DEFAULT_SEED = 4815162342;
+const YEARBOOK_THEATER_ENABLED_KEY = "sickollie.library.yearbookTheaterEnabled";
+const YEARBOOK_THEATER_SIZE_KEY = "sickollie.library.yearbookTheaterSize";
+const YEARBOOK_DIMENSION_PRESETS = [
+    ["400x500", "400 × 500 · Fast", 400, 500],
+    ["512x640", "512 × 640 · Light", 512, 640],
+    ["800x1000", "800 × 1000 · Medium", 800, 1000],
+    ["1024x1280", "1024 × 1280 · Large", 1024, 1280],
+    ["1440x1920", "1440 × 1920 · Ollie", 1440, 1920],
+    ["custom", "Custom dimensions", null, null],
+];
 
 let root = null;
 let assets = [];
 let folderScope = ALL_FOLDERS;
+let collectionScope = "";
+let loraCollections = [];
+const expandedFolders = new Set();
 let epochFilter = "";
 let statusFilter = "";
 let thumbnailFilter = "";
@@ -29,7 +47,15 @@ let lastPreviewAt = 0;
 let galleryPage = 0;
 let liveFolders = [];
 let styleReady = null;
+let libraryLoadPromise = null;
+let folderAssetCounts = new Map();
 let catalogRefreshTimer = null;
+let reviewMutationSerial = 0;
+const reviewMutations = new Map();
+let loraCardQueueChain = Promise.resolve();
+let loraBatchQueue = null;
+let loraSelectionMode = false;
+const selectedLoraIds = new Set();
 
 function ensureStyle() {
     if (styleReady) return styleReady;
@@ -98,7 +124,84 @@ function formatDate(value, fallback = "Never") {
 }
 
 function statusTone(value) {
-    return ({ favorite: "#f4ec51", keep: "#69e49a", reject: "#ff3eaf", retest: "#48e8ee" })[value] || "#8c8295";
+    return ({ favorite: "#f4ec51", keep: "#69e49a", rated: "#b89aff", reject: "#ff3eaf", retest: "#48e8ee" })[value] || "#8c8295";
+}
+
+function yearbookTheaterEnabledByDefault() { return localStorage.getItem(YEARBOOK_THEATER_ENABLED_KEY) !== "false"; }
+function yearbookTheaterInitialSize() {
+    const value = String(localStorage.getItem(YEARBOOK_THEATER_SIZE_KEY) || "fit");
+    return ["fit", "fill", "actual"].includes(value) ? value : "fit";
+}
+function yearbookTheaterCurrent(run) {
+    const theater = run?.theater;
+    if (!theater?.entries?.length) return null;
+    theater.cursor = Math.max(0, Math.min(theater.entries.length - 1, Number(theater.cursor ?? theater.entries.length - 1)));
+    return theater.entries[theater.cursor] || null;
+}
+function closeYearbookTheater(run) {
+    const theater = run?.theater;
+    if (!theater?.overlay) return;
+    theater.dismissed = true;
+    theater.overlay.remove(); theater.overlay = null; theater.ui = null;
+}
+function applyYearbookTheaterSizing(run) {
+    const theater = run?.theater; const ui = theater?.ui; if (!ui) return;
+    const mode = theater.sizeMode || "fit"; localStorage.setItem(YEARBOOK_THEATER_SIZE_KEY, mode);
+    ui.frame.style.overflow = mode === "actual" ? "auto" : "hidden";
+    if (mode === "actual") Object.assign(ui.image.style, { width: "auto", height: "auto", maxWidth: "none", maxHeight: "none", objectFit: "contain", margin: "auto" });
+    else Object.assign(ui.image.style, { width: "100%", height: "100%", maxWidth: "100%", maxHeight: "100%", objectFit: mode === "fill" ? "cover" : "contain", margin: "0" });
+    for (const [name, button] of Object.entries(ui.sizeButtons || {})) { const active = name === mode; button.style.background = active ? "rgba(72,232,238,.16)" : "#211d27"; button.style.borderColor = active ? "#48e8ee" : "#4a4452"; button.style.color = active ? "#dffcff" : "#b8b0c1"; }
+}
+function updateYearbookTheater(run) {
+    const theater = run?.theater; const ui = theater?.ui; if (!ui) return; const entry = yearbookTheaterCurrent(run);
+    const generated = theater.entries.length; const reviewed = theater.entries.filter(value => value.reviewed).length; const rejected = theater.entries.filter(value => value.rejected).length; const waiting = Math.max(0, generated - reviewed);
+    ui.runState.textContent = run.completed ? "● COMPLETE" : run.stopped ? "● STOPPED" : "● RUNNING";
+    ui.runState.style.color = run.completed ? "#69e49a" : run.stopped ? "#f4ec51" : "#48e8ee";
+    ui.position.textContent = entry ? `${theater.cursor + 1} / ${generated}` : "0 / 0"; ui.stats.textContent = `GENERATED ${generated} / ${Number(run.items?.length || 0)} · REVIEWED ${reviewed} · REJECTED ${rejected} · WAITING ${waiting}`;
+    ui.live.textContent = theater.live ? "● LIVE" : "❚❚ FROZEN"; ui.live.style.borderColor = theater.live ? "#69e49a" : "#f4ec51"; ui.live.style.color = theater.live ? "#9ff5c8" : "#fff29a"; ui.previous.disabled = !entry || theater.cursor <= 0; ui.next.disabled = !entry || theater.cursor >= generated - 1;
+    if (!entry) { ui.image.hidden = true; ui.image.removeAttribute("src"); ui.empty.hidden = false; ui.title.textContent = "Waiting for the first Yearbook thumbnail…"; ui.subtitle.textContent = "THEATER MODE · LIVE"; ui.path.textContent = "The newest completed LoRA thumbnail will appear here automatically."; ui.reviewButtons.forEach(button => button.disabled = true); return; }
+    ui.empty.hidden = true; ui.image.hidden = false; const thumb = entry.thumbnail || {}; const filename = String(thumb.filename || entry.item.thumbnail_ref || ""); if (filename) { const url = `${API}/thumbnail/${encodeURIComponent(filename)}?v=${encodeURIComponent(String(thumb.updated_at || entry.item.thumbnail_updated_at || Date.now()))}`; if (ui.image.src !== new URL(url, window.location.href).href) ui.image.src = url; }
+    ui.title.textContent = String(entry.item.model_name || "LoRA"); ui.subtitle.textContent = `LORA YEARBOOK · ${theater.live ? "FOLLOWING NEWEST" : "REVIEWING HISTORY"}`; ui.path.textContent = String(entry.item.relative_lora || entry.item.current_path || "");
+    for (const button of ui.reviewButtons) { button.disabled = Boolean(entry.busy); button.classList.toggle("active", String(entry.item.review_state || "none") === button.dataset.reviewState); }
+    applyYearbookTheaterSizing(run);
+}
+async function setYearbookTheaterReview(run, entry, nextState) {
+    if (!entry || entry.busy) return; entry.busy = true; updateYearbookTheater(run);
+    try {
+        const current = String(entry.item.review_state || "none");
+        const state = current === nextState ? "none" : nextState;
+        await request("/review", { method: "POST", body: { asset_id: entry.item.asset_id, state } });
+        entry.item.review_state = state; entry.rejected = state === "reject"; entry.reviewed = true;
+        const live = assetById(entry.item.asset_id); if (live) live.review_state = state;
+    } catch (error) { alert(error.message || "Could not update this Yearbook review."); } finally { entry.busy = false; updateYearbookTheater(run); }
+}
+function appendYearbookTheaterEntry(run, item, thumbnail) {
+    if (!run?.theaterEnabled) return; if (!run.theater) run.theater = { entries: [], cursor: -1, live: true, sizeMode: yearbookTheaterInitialSize(), overlay: null, ui: null, dismissed: false };
+    const theater = run.theater; const key = String(item?.asset_id || item?.relative_lora || item?.model_name || theater.entries.length); let entry = theater.entries.find(value => value.key === key);
+    if (!entry) { entry = { key, item, thumbnail, rating: Number(item?.rating || 0), rejected: String(item?.review_state || "") === "reject", reviewed: false, busy: false, previousState: String(item?.review_state || "none"), previousRating: Number(item?.rating || 0) }; theater.entries.push(entry); } else { entry.item = item; entry.thumbnail = thumbnail; }
+    if (theater.live || theater.cursor < 0) theater.cursor = theater.entries.length - 1; if (!theater.overlay && !theater.dismissed) openYearbookTheater(run); else updateYearbookTheater(run);
+}
+function openYearbookTheater(run = yearbook) {
+    if (!run || !run.theaterEnabled) return; if (!run.theater) run.theater = { entries: [], cursor: -1, live: true, sizeMode: yearbookTheaterInitialSize(), overlay: null, ui: null, dismissed: false }; const theater = run.theater;
+    theater.dismissed = false;
+    if (theater.overlay?.isConnected) { updateYearbookTheater(run); theater.overlay.focus(); return; }
+    const overlay = document.createElement("div"); overlay.dataset.soYearbookTheater = ""; overlay.tabIndex = -1; Object.assign(overlay.style, { position: "fixed", inset: "0", zIndex: "100090", display: "flex", alignItems: "center", justifyContent: "center", padding: "18px", background: "rgba(1,1,4,.91)", backdropFilter: "blur(10px) saturate(.7)", color: "#f6f2f8" });
+    const card = document.createElement("section"); Object.assign(card.style, { width: "min(1500px,calc(100vw - 36px))", height: "min(1120px,calc(100vh - 36px))", minHeight: "520px", display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", overflow: "hidden", borderRadius: "18px", border: "1px solid #48e8ee77", background: "linear-gradient(160deg,#10151a,#08070c 60%)", boxShadow: "0 32px 110px rgba(0,0,0,.78),0 0 42px rgba(72,232,238,.10)" });
+    const head = document.createElement("header"); Object.assign(head.style, { display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px", borderBottom: "1px solid #2d3940", background: "rgba(11,15,18,.96)" }); const headText = document.createElement("div"); headText.style.flex = "1"; const subtitle = document.createElement("div"); Object.assign(subtitle.style, { color: "#48e8ee", font: "900 9px Segoe UI,Arial", letterSpacing: ".14em" }); const title = document.createElement("div"); Object.assign(title.style, { marginTop: "3px", color: "#fff", font: "900 15px Segoe UI,Arial", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }); headText.append(subtitle, title); const runState = document.createElement("span"); Object.assign(runState.style, { font: "900 9px Segoe UI,Arial", letterSpacing: ".09em" }); const position = document.createElement("span"); Object.assign(position.style, { minWidth: "58px", color: "#9b93a2", textAlign: "right", font: "800 10px Segoe UI,Arial" }); const close = action("×", "#8c8295"); close.title = "Close Theater Mode; Yearbook continues"; Object.assign(close.style, { width: "34px", height: "34px", padding: "0", fontSize: "18px" }); close.onclick = () => closeYearbookTheater(run); head.append(headText, runState, position, close);
+    const center = document.createElement("div"); Object.assign(center.style, { minHeight: "0", display: "grid", gridTemplateRows: "minmax(0,1fr) auto", padding: "12px", gap: "9px" }); const frame = document.createElement("div"); Object.assign(frame.style, { minHeight: "0", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: "12px", border: "1px solid #27343a", background: "#020204" }); const image = document.createElement("img"); image.alt = "Newest Yearbook thumbnail"; image.draggable = false; image.hidden = true; const empty = document.createElement("div"); empty.textContent = "Waiting for the first thumbnail…"; Object.assign(empty.style, { color: "#756d7a", font: "800 13px Segoe UI,Arial" }); frame.append(image, empty);
+    const info = document.createElement("div"); Object.assign(info.style, { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "10px", alignItems: "center" }); const path = document.createElement("div"); Object.assign(path.style, { minWidth: "0", color: "#9e98a4", font: "10px Segoe UI,Arial", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }); const sizeWrap = document.createElement("div"); Object.assign(sizeWrap.style, { display: "flex", gap: "5px" }); const sizeButtons = {}; for (const [name, label] of [["fit", "FIT"], ["fill", "FILL"], ["actual", "ACTUAL"]]) { const button = action(label, "#4a4452"); Object.assign(button.style, { padding: "6px 9px", fontSize: "8px" }); button.onclick = () => { theater.sizeMode = name; applyYearbookTheaterSizing(run); }; sizeButtons[name] = button; sizeWrap.append(button); } info.append(path, sizeWrap); center.append(frame, info);
+    const controls = document.createElement("footer"); Object.assign(controls.style, { display: "grid", gridTemplateColumns: "auto minmax(300px,1fr) auto", alignItems: "center", gap: "12px", padding: "12px 14px 14px", borderTop: "1px solid #2d3940", background: "rgba(8,12,15,.97)" }); const nav = document.createElement("div"); Object.assign(nav.style, { display: "flex", gap: "6px", alignItems: "center" }); const previous = action("←", "#8c8295"); const next = action("→", "#8c8295"); const live = action("● LIVE", "#69e49a"); previous.onclick = () => { if (!theater.entries.length) return; theater.live = false; theater.cursor = Math.max(0, theater.cursor - 1); updateYearbookTheater(run); }; next.onclick = () => { if (!theater.entries.length) return; theater.live = false; theater.cursor = Math.min(theater.entries.length - 1, theater.cursor + 1); updateYearbookTheater(run); }; live.onclick = () => { theater.live = !theater.live; if (theater.live && theater.entries.length) theater.cursor = theater.entries.length - 1; updateYearbookTheater(run); }; nav.append(previous, next, live);
+    const review = document.createElement("div"); Object.assign(review.style, { display: "flex", flexDirection: "column", alignItems: "center", gap: "7px" });
+    const reviewRow = document.createElement("div"); Object.assign(reviewRow.style, { display: "grid", gridTemplateColumns: "repeat(4,minmax(94px,1fr))", justifyContent: "center", gap: "8px", width: "min(560px,100%)" });
+    const reviewButtons = [];
+    for (const [label, state, tone, shortcut] of [["★ FAVORITE", "favorite", "#f4ec51", "1"], ["✓ LIKE", "keep", "#69e49a", "2"], ["↻ RETEST", "retest", "#48e8ee", "3"], ["× REJECT", "reject", "#ff3eaf", "X"]]) {
+        const button = action(`${label} [${shortcut}]`, tone); button.dataset.reviewState = state; button.title = `${label.replace(/^[^A-Z]+/, "")} · key ${shortcut}`;
+        Object.assign(button.style, { minWidth: "0", padding: "11px 9px", fontSize: "10px" });
+        button.onclick = () => { const entry = yearbookTheaterCurrent(run); if (entry) void setYearbookTheaterReview(run, entry, state); };
+        reviewButtons.push(button); reviewRow.append(button);
+    }
+    const stats = document.createElement("div"); Object.assign(stats.style, { color: "#8f8997", font: "800 8px Segoe UI,Arial", letterSpacing: ".06em", textAlign: "center" }); review.append(reviewRow, stats); controls.append(nav, review, document.createElement("span")); card.append(head, center, controls); overlay.append(card); document.body.append(overlay); theater.overlay = overlay; theater.ui = { subtitle, title, runState, position, frame, image, empty, path, sizeButtons, previous, next, live, reviewButtons, stats };
+    overlay.addEventListener("keydown", event => { if (event.ctrlKey || event.metaKey || event.altKey) return; const shortcutStates = { "1": "favorite", "2": "keep", "3": "retest", "f": "favorite", "l": "keep", "r": "retest", "x": "reject" }; const shortcutState = shortcutStates[event.key.toLowerCase()]; if (shortcutState) { event.preventDefault(); const entry = yearbookTheaterCurrent(run); if (entry) void setYearbookTheaterReview(run, entry, shortcutState); return; } if (event.key === " ") { event.preventDefault(); theater.live = !theater.live; if (theater.live && theater.entries.length) theater.cursor = theater.entries.length - 1; updateYearbookTheater(run); return; } if (event.key === "ArrowLeft") { event.preventDefault(); if (theater.entries.length) { theater.live = false; theater.cursor = Math.max(0, theater.cursor - 1); updateYearbookTheater(run); } return; } if (event.key === "ArrowRight") { event.preventDefault(); if (theater.entries.length) { theater.live = false; theater.cursor = Math.min(theater.entries.length - 1, theater.cursor + 1); updateYearbookTheater(run); } return; } if (event.key === "Escape") { event.preventDefault(); closeYearbookTheater(run); } }, true); updateYearbookTheater(run); requestAnimationFrame(() => overlay.focus());
 }
 
 function hasRenderableThumbnail(asset) {
@@ -123,6 +226,10 @@ function yearbookTargets(values, mode) {
 }
 
 function folderTreeAssets() {
+    if (collectionScope) {
+        const ids = collectionAssetIds();
+        return assets.filter(asset => ids.has(String(asset.asset_id)));
+    }
     if (folderScope === ALL_FOLDERS) return [...assets];
     return assets.filter(asset => {
         const folder = String(asset.folder || "");
@@ -150,6 +257,75 @@ function isolateTextInput(container) {
 function releaseFocusInside(container) {
     const active = document.activeElement;
     if (active && container?.contains(active) && typeof active.blur === "function") active.blur();
+}
+
+let yearbookFocusRecoveryCleanup = null;
+
+function releaseYearbookCanvasCapture() {
+    const canvas = app.canvas;
+    if (!canvas) return;
+    try { canvas.pointer?.reset?.(); } catch (error) {}
+    try { canvas.dragging_canvas = false; } catch (error) {}
+    try { canvas.isDragging = false; } catch (error) {}
+    try { canvas.node_capturing_input = null; } catch (error) {}
+    try { canvas.node_widget = null; } catch (error) {}
+    try {
+        const canvasElement = canvas.canvas || app.canvasEl;
+        if (canvasElement && document.activeElement === canvasElement && typeof canvasElement.blur === "function") canvasElement.blur();
+    } catch (error) {}
+}
+
+function armYearbookFocusRecovery() {
+    yearbookFocusRecoveryCleanup?.();
+
+    let timeout = null;
+    const focusEditable = (target) => {
+        const editable = target instanceof Element ? target.closest("input, textarea, select, [contenteditable='true']") : null;
+        if (!editable || typeof editable.focus !== "function") return;
+        const refocus = () => {
+            if (!editable.isConnected || document.activeElement === editable) return;
+            try { editable.focus({ preventScroll: true }); }
+            catch (error) { try { editable.focus(); } catch (focusError) {} }
+        };
+        queueMicrotask(refocus);
+        requestAnimationFrame(refocus);
+        setTimeout(refocus, 60);
+    };
+
+    const onPointerDown = (event) => focusEditable(event.target);
+    const onMouseDown = (event) => focusEditable(event.target);
+    const onInput = (event) => {
+        if (!isEditableTarget(event.target)) return;
+        const inputType = String(event.inputType || "");
+        if (!inputType || inputType.startsWith("insert")) yearbookFocusRecoveryCleanup?.();
+    };
+
+    // During the recovery window, printable keys that already target a real text
+    // control should stay out of Comfy/LiteGraph's global shortcut handlers.
+    // We do not preventDefault(), so the browser can still perform normal editing.
+    const onKeyDown = (event) => {
+        if (!isEditableTarget(event.target)) return;
+        if (event.ctrlKey || event.altKey || event.metaKey) return;
+        if (event.key.length === 1 || event.key === "Enter" || event.key === "Backspace" || event.key === "Delete") {
+            event.stopImmediatePropagation();
+        }
+    };
+
+    const cleanup = () => {
+        window.removeEventListener("pointerdown", onPointerDown, true);
+        window.removeEventListener("mousedown", onMouseDown, true);
+        window.removeEventListener("keydown", onKeyDown, true);
+        window.removeEventListener("input", onInput, true);
+        if (timeout !== null) clearTimeout(timeout);
+        if (yearbookFocusRecoveryCleanup === cleanup) yearbookFocusRecoveryCleanup = null;
+    };
+    yearbookFocusRecoveryCleanup = cleanup;
+
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("mousedown", onMouseDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("input", onInput, true);
+    timeout = setTimeout(cleanup, 5 * 60 * 1000);
 }
 
 function thumbUrl(asset) {
@@ -181,12 +357,32 @@ function folderChoices() {
     });
 }
 
+function rebuildFolderAssetCounts() {
+    const counts = new Map([[ALL_FOLDERS, assets.length]]);
+    for (const asset of assets) {
+        const folder = String(asset.folder || "");
+        if (!folder || folder === "[Root]") continue;
+        const parts = folder.split("/").filter(Boolean);
+        for (let index = 1; index <= parts.length; index++) {
+            const path = parts.slice(0, index).join("/");
+            counts.set(path, Number(counts.get(path) || 0) + 1);
+        }
+    }
+    folderAssetCounts = counts;
+}
+
+function activeLoraCollection() { return loraCollections.find(item => String(item.collection_id) === String(collectionScope)); }
+function currentScopeLabel() { return activeLoraCollection()?.name || (folderScope === ALL_FOLDERS ? "All LoRAs" : folderScope); }
+function collectionAssetIds() { return new Set((activeLoraCollection()?.asset_ids || []).map(String)); }
+
 function epochChoices() {
     return [...new Set(assets.map(asset => asset.epoch).filter(value => Number.isInteger(value)))].sort((a, b) => a - b);
 }
 
 function visibleAssets() {
+    const collectionIds = collectionScope ? collectionAssetIds() : null;
     const values = assets.filter(asset => {
+        if (collectionIds && !collectionIds.has(String(asset.asset_id))) return false;
         if (folderScope !== ALL_FOLDERS) {
             const folder = String(asset.folder || "");
             if (!(folder === folderScope || folder.startsWith(`${folderScope}/`))) return false;
@@ -211,17 +407,61 @@ function visibleAssets() {
         if (sortMode === "most_used") return Number(b.use_count || 0) - Number(a.use_count || 0) || byName(a, b);
         if (sortMode === "least_used") return Number(a.use_count || 0) - Number(b.use_count || 0) || byName(a, b);
         if (sortMode === "last_used") return String(b.last_used_at || "").localeCompare(String(a.last_used_at || "")) || byName(a, b);
-        return String(b.updated_at || "").localeCompare(String(a.updated_at || ""));
+        if (sortMode === "thumbnail_newest") {
+            const aHasThumbnail = hasRenderableThumbnail(a);
+            const bHasThumbnail = hasRenderableThumbnail(b);
+            if (aHasThumbnail !== bHasThumbnail) return bHasThumbnail ? 1 : -1;
+            const thumbnailOrder = String(b.thumbnail_updated_at || "").localeCompare(String(a.thumbnail_updated_at || ""));
+            return thumbnailOrder || String(b.updated_at || "").localeCompare(String(a.updated_at || "")) || byName(a, b);
+        }
+        return String(b.updated_at || "").localeCompare(String(a.updated_at || "")) || byName(a, b);
     });
     return values;
 }
 
 function assetById(assetId) { return assets.find(asset => asset.asset_id === assetId); }
 
-async function load() {
-    [assets, liveFolders] = await Promise.all([request(`/assets?sort=recent`), request(`/folders`)]);
-    if (folderScope !== ALL_FOLDERS && !folderChoices().includes(folderScope)) folderScope = ALL_FOLDERS;
+function toggleLoraSelection(assetId) {
+    const id = String(assetId || "");
+    if (!id) return;
+    if (selectedLoraIds.has(id)) selectedLoraIds.delete(id);
+    else selectedLoraIds.add(id);
+    loraSelectionMode = true;
     renderTools(); renderList();
+}
+
+function clearLoraSelection(exitMode = false) {
+    selectedLoraIds.clear();
+    if (exitMode) loraSelectionMode = false;
+}
+
+function overlayPendingReviewState(nextAssets) {
+    for (const asset of nextAssets) {
+        const mutation = reviewMutations.get(asset.asset_id);
+        if (!mutation) continue;
+        if (!mutation.pending && asset.review_state === mutation.state) {
+            reviewMutations.delete(asset.asset_id);
+            continue;
+        }
+        asset.review_state = mutation.state;
+    }
+}
+
+async function load() {
+    if (libraryLoadPromise) return libraryLoadPromise;
+    libraryLoadPromise = (async () => {
+        const [nextAssets, nextLiveFolders, nextCollections] = await Promise.all([request(`/assets?sort=recent`), request(`/folders`), request(`/lora-collections`)]);
+        overlayPendingReviewState(nextAssets);
+        assets = nextAssets;
+        liveFolders = nextLiveFolders;
+        loraCollections = nextCollections;
+        rebuildFolderAssetCounts();
+        if (!collectionScope && folderScope !== ALL_FOLDERS && !folderChoices().includes(folderScope)) folderScope = ALL_FOLDERS;
+        if (collectionScope && !activeLoraCollection()) collectionScope = "";
+        renderSidebar(); renderTools(); renderList(); updateScanButton();
+    })();
+    try { return await libraryLoadPromise; }
+    finally { libraryLoadPromise = null; }
 }
 
 function updateCachedThumbnail(assetId, thumbnail) {
@@ -246,15 +486,43 @@ function refreshCatalogAfterYearbook() {
 }
 
 async function setReview(asset, next) {
-    const previous = asset.review_state;
+    const canonical = assetById(asset.asset_id) || asset;
+    const previous = canonical.review_state;
     const state = previous === next ? "none" : next;
-    asset.review_state = state; renderList();
+    const serial = ++reviewMutationSerial;
+    reviewMutations.set(asset.asset_id, { serial, state, previous, pending: true });
+    canonical.review_state = state;
+    asset.review_state = state;
+    renderList();
     try {
         await request("/review", { method: "POST", body: { asset_id: asset.asset_id, state } });
+        const mutation = reviewMutations.get(asset.asset_id);
+        if (mutation?.serial === serial) {
+            mutation.pending = false;
+            setTimeout(() => {
+                const current = reviewMutations.get(asset.asset_id);
+                if (current?.serial === serial && !current.pending) reviewMutations.delete(asset.asset_id);
+            }, 5000);
+        }
         setFeedback(`${asset.model_name}: ${state === "none" ? "rating cleared" : state}`);
-        await load();
+        // The review POST is already durable before it returns. Do not immediately
+        // reload the entire catalog here: that extra fetch used to overwrite the
+        // optimistic button state for a frame (or longer) and caused the visible
+        // on/off/on flicker. Any later catalog refresh is reconciled by
+        // overlayPendingReviewState until the server reports the committed state.
+        renderList();
+        return state;
     } catch (error) {
-        asset.review_state = previous; renderList(); setFeedback(error.message, "#ff78bd");
+        const mutation = reviewMutations.get(asset.asset_id);
+        if (mutation?.serial === serial) {
+            reviewMutations.delete(asset.asset_id);
+            const current = assetById(asset.asset_id) || asset;
+            current.review_state = previous;
+            asset.review_state = previous;
+        }
+        renderList();
+        setFeedback(error.message, "#ff78bd");
+        return previous;
     }
 }
 
@@ -278,12 +546,21 @@ async function quarantineRejected(button) {
 
 function stateButtons(asset, compact = true) {
     const row = document.createElement("div"); row.className = compact ? "so-lib-state-row" : "so-lib-actions";
-    for (const [label, value, tone] of [["✓ 3★", "keep", "#69e49a"], ["★ 4★", "favorite", "#f4ec51"], ["↻", "retest", "#48e8ee"], ["×", "reject", "#ff3eaf"]]) {
-        const button = action(label, tone); button.title = ({ keep: "Keep · 3 stars", favorite: "Favorite · 4 stars", retest: "Retest", reject: "Reject" })[value];
-        if (asset.review_state === value) button.classList.add("active");
-        button.onclick = event => { event.stopPropagation(); setReview(asset, value); };
+    const buttons = [];
+    const sync = () => {
+        const pending = Boolean(reviewMutations.get(asset.asset_id)?.pending);
+        for (const [button, value] of buttons) {
+            button.classList.toggle("active", asset.review_state === value);
+            button.disabled = pending;
+        }
+    };
+    for (const [label, value, tone] of [["★", "favorite", "#f4ec51"], ["✓", "keep", "#69e49a"], ["↻", "retest", "#48e8ee"], ["×", "reject", "#ff3eaf"]]) {
+        const button = action(label, tone); button.title = ({ keep: "Like", favorite: "Favorite", retest: "Retest", reject: "Reject" })[value];
+        buttons.push([button, value]);
+        button.onclick = async event => { event.stopPropagation(); await setReview(asset, value); sync(); };
         row.append(button);
     }
+    sync();
     return row;
 }
 
@@ -305,7 +582,8 @@ function renderList() {
         list.append(empty); return;
     }
     for (const asset of shown) {
-        const card = document.createElement("article"); card.className = "so-lib-card"; card.onclick = () => openDetail(asset.asset_id);
+        const selected = selectedLoraIds.has(String(asset.asset_id || ""));
+        const card = document.createElement("article"); card.className = `so-lib-card${selected ? " selected" : ""}`; card.onclick = () => loraSelectionMode ? toggleLoraSelection(asset.asset_id) : openDetail(asset.asset_id);
         const preview = document.createElement("div"); preview.className = "so-lib-preview"; preview.style.cssText = "aspect-ratio:3 / 4;flex:0 0 auto!important;height:auto!important;min-height:0;";
         const url = thumbUrl(asset);
         if (url) {
@@ -315,11 +593,20 @@ function renderList() {
             const placeholder = document.createElement("div"); placeholder.className = "so-lib-placeholder"; placeholder.textContent = asset.civitai_preview ? "Civitai image ready to cache" : "No local thumbnail yet"; preview.append(placeholder);
         }
         const badge = document.createElement("span"); badge.className = "so-lib-badge"; badge.textContent = sourceLabel(asset); badge.style.setProperty("--badge", hasRenderableThumbnail(asset) ? "#69e49a" : asset.civitai_preview ? "#9c62ff" : "#8c8295"); preview.append(badge);
+        if (loraSelectionMode) {
+            const selector = document.createElement("button"); selector.type = "button"; selector.className = "so-lib-card-selector"; selector.textContent = selected ? "✓" : ""; selector.title = selected ? "Remove from selection" : "Select LoRA"; selector.setAttribute("aria-pressed", selected ? "true" : "false");
+            selector.onclick = event => { event.stopPropagation(); toggleLoraSelection(asset.asset_id); };
+            preview.append(selector);
+        }
         const uses = Number(asset.use_count || 0); const usage = document.createElement("span"); usage.className = "so-lib-usage-pill"; usage.textContent = uses ? `used ${uses}×` : "untested"; preview.append(usage);
         const body = document.createElement("div"); body.className = "so-lib-card-body"; body.style.cssText = "display:block!important;flex:0 0 auto!important;min-height:92px;";
         const name = document.createElement("strong"); name.className = "so-lib-card-name"; name.textContent = asset.model_name || asset.relative_lora;
-        const loadButton = action("Load LoRA", "#69e49a", "so-lib-card-load"); loadButton.onclick = async event => { event.stopPropagation(); loadButton.disabled = true; loadButton.textContent = "Loading…"; try { await loadIntoLoader(asset.relative_lora); const strength = widget(findLoader(), "main_strength")?.value; setFeedback(`Loaded ${asset.model_name}${strength !== undefined ? ` · strength ${strength}` : ""} · fixed.`); loadButton.textContent = "Loaded ✓"; } catch (error) { alert(error.message); loadButton.disabled = false; loadButton.textContent = "Load LoRA"; } };
-        body.append(name, loadButton, stateButtons(asset)); card.append(preview, body); list.append(card);
+        const quick = document.createElement("div"); quick.className = "so-lib-card-quick";
+        const loadButton = action("LOAD", "#69e49a"); loadButton.onclick = async event => { event.stopPropagation(); loadButton.disabled = true; loadButton.textContent = "LOADING…"; try { await loadIntoLoader(asset.relative_lora); const strength = widget(findLoader(), "main_strength")?.value; setFeedback(`Loaded ${asset.model_name}${strength !== undefined ? ` · strength ${strength}` : ""} · fixed.`); loadButton.textContent = "LOADED ✓"; } catch (error) { alert(error.message); loadButton.disabled = false; loadButton.textContent = "LOAD"; } };
+        const queueButton = action("QUEUE", "#b89aff"); queueButton.title = "Queue this LoRA with the active workflow"; queueButton.onclick = event => { event.stopPropagation(); queueLoraAsset(asset, queueButton); };
+        const collectButton = action("＋", "#48e8ee"); collectButton.title = "Add this LoRA to a collection"; collectButton.onclick = event => { event.stopPropagation(); openLoraCollectionPicker([asset.asset_id]); };
+        quick.append(loadButton, queueButton, collectButton);
+        body.append(name, quick, stateButtons(asset)); card.append(preview, body); list.append(card);
     }
     if (totalPages > 1) {
         const pager = document.createElement("div"); pager.className = "so-lib-pager";
@@ -355,19 +642,151 @@ function openFolderPicker() {
     card.append(title, copy, search, list); modal.append(card); document.body.append(modal); isolateTextInput(modal); draw(); search.focus();
 }
 
+async function createLoraCollection(name, assetIds = []) {
+    const result = await request("/lora-collections", { method: "POST", body: { name } });
+    const collection = result.collection;
+    if (assetIds.length) await updateLoraCollectionMemberships([collection.collection_id], assetIds, "add", false);
+    loraCollections = await request("/lora-collections");
+    collectionScope = String(collection.collection_id || ""); folderScope = ALL_FOLDERS; galleryPage = 0;
+    renderSidebar(); renderTools(); renderList(); updateScanButton();
+    window.dispatchEvent(new CustomEvent("sickollie:lora-collections-updated"));
+    return collection;
+}
+
+function applyLocalLoraCollectionMemberships(collectionIds, assetIds, actionName) {
+    const collectionSet = new Set((collectionIds || []).map(String));
+    const assetSet = new Set((assetIds || []).map(String));
+    for (const collection of loraCollections) {
+        if (!collectionSet.has(String(collection.collection_id || ""))) continue;
+        const members = new Set((collection.asset_ids || []).map(String));
+        if (actionName === "remove") for (const id of assetSet) members.delete(id);
+        else for (const id of assetSet) members.add(id);
+        collection.asset_ids = [...members];
+        collection.asset_count = members.size;
+    }
+}
+
+async function updateLoraCollectionMemberships(collectionIds, assetIds, actionName = "add", redraw = true) {
+    const cleanCollections = [...new Set((collectionIds || []).map(String).filter(Boolean))];
+    const cleanAssets = [...new Set((assetIds || []).map(String).filter(Boolean))];
+    if (!cleanCollections.length || !cleanAssets.length) return { assets: cleanAssets.length, collections: cleanCollections.length, memberships_changed: 0 };
+    const result = await request("/lora-collections/members/bulk", { method: "POST", body: { action: actionName, asset_ids: cleanAssets, collection_ids: cleanCollections } });
+    applyLocalLoraCollectionMemberships(cleanCollections, cleanAssets, actionName);
+    if (redraw) { renderSidebar(); renderTools(); renderList(); updateScanButton(); }
+    window.dispatchEvent(new CustomEvent("sickollie:lora-collections-updated"));
+    return result;
+}
+
+function openLoraCollectionPicker(assetIds) {
+    const ids = [...new Set((assetIds || []).map(String).filter(Boolean))];
+    const modal = document.createElement("div"); modal.className = "so-lib-modal";
+    const card = document.createElement("section"); card.className = "so-lib-form-card";
+    const title = document.createElement("h3"); title.textContent = !ids.length ? "NEW LORA COLLECTION" : ids.length === 1 ? "ADD LORA TO COLLECTION" : `ADD ${ids.length} LORAS TO COLLECTION`;
+    const copy = document.createElement("p"); copy.textContent = ids.length ? "Choose every collection you want in one pass, then save once. Collections are virtual; LoRA files stay exactly where they live on disk." : "Create a virtual collection without changing any LoRA file locations.";
+    const createRow = document.createElement("div"); Object.assign(createRow.style, { display: "grid", gridTemplateColumns: "1fr auto", gap: "7px" });
+    const input = document.createElement("input"); input.className = "so-lib-picker-search"; input.placeholder = "New collection name…";
+    const create = action(ids.length ? "CREATE + ADD" : "CREATE", "#b89aff"); create.onclick = async () => { const name = input.value.trim(); if (!name) return; create.disabled = true; try { await createLoraCollection(name, ids); modal.remove(); if (ids.length) { clearLoraSelection(true); renderTools(); renderList(); } setFeedback(ids.length ? `Added ${ids.length} LoRA${ids.length === 1 ? "" : "s"} to ${name}.` : `Created ${name}.`); } catch (error) { alert(error.message); create.disabled = false; } };
+    createRow.append(input, create);
+    const list = document.createElement("div"); list.className = "so-lib-picker-list";
+    const touched = new Set();
+    for (const collection of ids.length ? loraCollections : []) {
+        const memberIds = new Set((collection.asset_ids || []).map(String));
+        const insideCount = ids.filter(id => memberIds.has(id)).length;
+        const allInside = insideCount === ids.length;
+        const partiallyInside = insideCount > 0 && !allInside;
+        const row = document.createElement("label"); row.className = `so-lib-picker-item so-lib-picker-check${allInside ? " active" : ""}`;
+        const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.value = String(collection.collection_id); checkbox.checked = allInside; checkbox.indeterminate = partiallyInside; checkbox.dataset.initial = allInside ? "all" : partiallyInside ? "some" : "none";
+        checkbox.onchange = () => { checkbox.indeterminate = false; touched.add(String(collection.collection_id)); row.classList.toggle("active", checkbox.checked); };
+        const name = document.createElement("span"); name.textContent = collection.name; name.style.flex = "1";
+        const count = document.createElement("em"); count.textContent = partiallyInside ? `${insideCount}/${ids.length} selected · ${Number(collection.asset_count || 0).toLocaleString()} total` : `${Number(collection.asset_count || 0).toLocaleString()}`;
+        row.append(checkbox, name, count);
+        list.append(row);
+    }
+    if (ids.length && !loraCollections.length) { const empty = document.createElement("div"); empty.className = "so-lib-empty"; empty.style.padding = "24px"; empty.textContent = "No collections yet. Create the first one above."; list.append(empty); }
+    list.hidden = !ids.length;
+    const buttons = document.createElement("div"); buttons.className = "so-lib-form-actions"; const cancel = action("Cancel", "#8c8295"); cancel.onclick = () => modal.remove(); buttons.append(cancel);
+    if (ids.length && loraCollections.length) {
+        const save = action("SAVE COLLECTIONS", "#69e49a"); save.onclick = async () => {
+            const addIds = [], removeIds = [];
+            for (const checkbox of list.querySelectorAll('input[type="checkbox"]')) {
+                const id = String(checkbox.value || "");
+                if (!touched.has(id)) continue;
+                if (checkbox.checked) addIds.push(id); else removeIds.push(id);
+            }
+            if (!addIds.length && !removeIds.length) { modal.remove(); return; }
+            save.disabled = true; cancel.disabled = true;
+            try {
+                if (addIds.length) await updateLoraCollectionMemberships(addIds, ids, "add", false);
+                if (removeIds.length) await updateLoraCollectionMemberships(removeIds, ids, "remove", false);
+                modal.remove();
+                clearLoraSelection(true);
+                renderSidebar(); renderTools(); renderList(); updateScanButton();
+                const changed = addIds.length + removeIds.length;
+                setFeedback(`Updated ${ids.length.toLocaleString()} LoRA${ids.length === 1 ? "" : "s"} across ${changed.toLocaleString()} collection${changed === 1 ? "" : "s"}.`);
+            } catch (error) { alert(error.message); save.disabled = false; cancel.disabled = false; }
+        };
+        buttons.append(save);
+    }
+    card.append(title, copy, createRow, list, buttons); modal.append(card); document.body.append(modal); isolateTextInput(modal); modal.onclick = event => { if (event.target === modal) modal.remove(); }; input.focus();
+}
+
+function renderSidebar() {
+    const sidebar = root?.querySelector("[data-lora-sidebar]"); if (!sidebar) return;
+    sidebar.replaceChildren();
+    const search = document.createElement("input"); search.className = "so-lib-sidebar-search"; search.placeholder = "Find folders…";
+    const foldersTitle = document.createElement("div"); foldersTitle.className = "so-lib-sidebar-title"; foldersTitle.textContent = "FOLDERS";
+    const folderList = document.createElement("div"); folderList.className = "so-lib-sidebar-list";
+    const collectionsTitle = document.createElement("div"); collectionsTitle.className = "so-lib-sidebar-title"; collectionsTitle.textContent = "COLLECTIONS";
+    const collectionList = document.createElement("div"); collectionList.className = "so-lib-sidebar-list so-lib-sidebar-collections";
+    const chooseFolder = value => { collectionScope = ""; folderScope = value; galleryPage = 0; for (const path of String(value).split("/").slice(0, -1).map((_, index, parts) => parts.slice(0, index + 1).join("/"))) expandedFolders.add(path); renderSidebar(); renderTools(); renderList(); updateScanButton(); };
+    const folderCount = value => Number(folderAssetCounts.get(value) || 0);
+    const drawFolders = () => {
+        folderList.replaceChildren(); const needle = search.value.trim().toLowerCase();
+        const rootRow = document.createElement("button"); rootRow.type = "button"; rootRow.className = `so-lib-sidebar-row${!collectionScope && folderScope === ALL_FOLDERS ? " active" : ""}`; rootRow.innerHTML = `<span>⌂</span><b>All LoRAs</b><em>${folderCount(ALL_FOLDERS).toLocaleString()}</em>`; rootRow.onclick = () => chooseFolder(ALL_FOLDERS); folderList.append(rootRow);
+        const children = new Map();
+        for (const path of liveFolders) { const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ""; if (!children.has(parent)) children.set(parent, []); children.get(parent).push(path); }
+        const addPath = (path, depth, recurse = true) => { const nested = children.get(path) || []; const row = document.createElement("div"); row.className = `so-lib-sidebar-row${!collectionScope && folderScope === path ? " active" : ""}`; row.style.setProperty("--depth", depth); const caret = document.createElement("button"); caret.type = "button"; caret.className = "so-lib-sidebar-caret"; caret.textContent = nested.length ? (expandedFolders.has(path) ? "▾" : "▸") : ""; caret.disabled = !nested.length; caret.onclick = event => { event.stopPropagation(); if (expandedFolders.has(path)) expandedFolders.delete(path); else expandedFolders.add(path); drawFolders(); }; const name = document.createElement("button"); name.type = "button"; name.className = "so-lib-sidebar-name"; name.textContent = `📁 ${path.split("/").pop()}`; name.title = path; name.onclick = () => chooseFolder(path); const count = document.createElement("em"); count.textContent = folderCount(path).toLocaleString(); row.append(caret, name, count); folderList.append(row); if (recurse && expandedFolders.has(path)) for (const child of nested.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) addPath(child, depth + 1); };
+        if (needle) for (const path of liveFolders.filter(path => path.toLowerCase().includes(needle)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) addPath(path, Math.min(4, path.split("/").length - 1), false);
+        else for (const path of (children.get("") || []).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))) addPath(path, 0);
+    };
+    search.oninput = drawFolders;
+    const newCollection = document.createElement("button"); newCollection.type = "button"; newCollection.className = "so-lib-sidebar-row so-lib-sidebar-new"; newCollection.innerHTML = "<span>＋</span><b>New collection</b><em></em>"; newCollection.onclick = () => openLoraCollectionPicker([]);
+    collectionList.append(newCollection);
+    for (const collection of loraCollections) {
+        const row = document.createElement("div"); row.className = `so-lib-sidebar-row${String(collectionScope) === String(collection.collection_id) ? " active" : ""}`;
+        const icon = document.createElement("span"); icon.textContent = "◆"; icon.style.color = collection.color || "#b89aff";
+        const name = document.createElement("button"); name.type = "button"; name.className = "so-lib-sidebar-name"; name.textContent = collection.name; name.onclick = () => { collectionScope = String(collection.collection_id); folderScope = ALL_FOLDERS; galleryPage = 0; renderSidebar(); renderTools(); renderList(); updateScanButton(); };
+        const count = document.createElement("em"); count.textContent = Number(collection.asset_count || 0).toLocaleString();
+        const remove = document.createElement("button"); remove.type = "button"; remove.className = "so-lib-sidebar-delete"; remove.textContent = "×"; remove.title = "Delete collection only; LoRA files remain"; remove.onclick = async event => { event.stopPropagation(); if (!confirm(`Delete the collection “${collection.name}”? LoRA files and Library entries remain untouched.`)) return; await request(`/lora-collections/${encodeURIComponent(collection.collection_id)}`, { method: "DELETE" }); if (collectionScope === collection.collection_id) collectionScope = ""; await load(); window.dispatchEvent(new CustomEvent("sickollie:lora-collections-updated")); };
+        row.append(icon, name, count, remove); collectionList.append(row);
+    }
+    sidebar.append(search, foldersTitle, folderList, collectionsTitle, collectionList); drawFolders();
+}
+
 function renderTools() {
     const tools = root?.querySelector("[data-tools]"); if (!tools) return;
     tools.replaceChildren();
-    const scope = document.createElement("button"); scope.className = "so-lib-scope"; scope.textContent = `📁 ${folderScope}`; scope.onclick = openFolderPicker;
     const epochs = selectControl([["", "All epochs"], ...epochChoices().map(value => [String(value), `Epoch ${value}`])], epochFilter, value => { epochFilter = value; renderList(); });
-    const states = selectControl([["", "All ratings + test states"], ["tested", "Tested"], ["untested", "Never tested"], ["keep", "Keep · 3★"], ["favorite", "Favorite · 4★"], ["retest", "Retest"], ["reject", "Reject"]], statusFilter, value => { statusFilter = value; renderList(); });
+    const states = selectControl([["", "All review + test states"], ["tested", "Tested"], ["untested", "Never tested"], ["favorite", "Favorite"], ["keep", "Like"], ["retest", "Retest"], ["reject", "Reject"]], statusFilter, value => { statusFilter = value; renderList(); });
     const thumbs = selectControl([["", "All thumbnails"], ["missing", "Missing thumbnail"], ["civitai", "Civitai"], ["generated", "Generated"], ["custom", "Custom"], ["local", "Local preview"]], thumbnailFilter, value => { thumbnailFilter = value; renderList(); });
-    const sorts = selectControl([["recent", "Recently cataloged"], ["name", "Name"], ["most_used", "Most used"], ["least_used", "Least used"], ["last_used", "Recently used"]], sortMode, value => { sortMode = value; renderList(); });
+    const sorts = selectControl([["thumbnail_newest", "Newest thumbnail"], ["recent", "Recently cataloged"], ["name", "Name"], ["most_used", "Most used"], ["least_used", "Least used"], ["last_used", "Recently used"]], sortMode, value => { sortMode = value; galleryPage = 0; renderList(); });
     const auto = document.createElement("label"); auto.className = "so-lib-toggle";
     const check = document.createElement("input"); check.type = "checkbox"; check.checked = autoFirstEnabled(); check.onchange = () => { localStorage.setItem(AUTO_FIRST_KEY, check.checked ? "true" : "false"); setFeedback(check.checked ? "New LoRAs will use their first Preview image automatically." : "Automatic first-image thumbnails are off."); };
     const label = document.createElement("span"); label.textContent = "Auto first image"; auto.append(check, label);
     const refresh = action("Refresh", "#69e49a"); refresh.onclick = () => load().catch(error => setFeedback(error.message, "#ff78bd"));
-    tools.append(scope, epochs, states, thumbs, sorts, auto, refresh);
+    const scope = document.createElement("div"); scope.className = "so-lib-current-scope"; scope.textContent = currentScopeLabel();
+    const queueScope = action(loraBatchQueue ? "STOP QUEUEING" : "QUEUE CURRENT VIEW", "#b89aff"); queueScope.dataset.queueScope = ""; queueScope.onclick = () => { if (loraBatchQueue) { loraBatchQueue.stopped = true; setFeedback("Stopping LoRA queue submission after the current item…", "#f4ec51"); } else openLoraScopeQueueDialog(); };
+    const select = action(loraSelectionMode ? "DONE SELECTING" : "SELECT MULTIPLE", "#48e8ee"); select.onclick = () => { loraSelectionMode = !loraSelectionMode; if (!loraSelectionMode) selectedLoraIds.clear(); renderTools(); renderList(); };
+    tools.append(scope, epochs, states, thumbs, sorts, auto, queueScope, select, refresh);
+    if (loraSelectionMode) {
+        const selection = document.createElement("div"); selection.className = "so-lib-selection-tools";
+        const visible = visibleAssets();
+        const count = document.createElement("strong"); count.textContent = `${selectedLoraIds.size.toLocaleString()} SELECTED`;
+        const selectView = action(`SELECT VIEW · ${visible.length.toLocaleString()}`, "#48e8ee"); selectView.onclick = () => { for (const asset of visible) if (asset.asset_id) selectedLoraIds.add(String(asset.asset_id)); renderTools(); renderList(); };
+        const clear = action("CLEAR", "#8c8295"); clear.disabled = !selectedLoraIds.size; clear.onclick = () => { selectedLoraIds.clear(); renderTools(); renderList(); };
+        const collect = action("ADD TO COLLECTIONS", "#69e49a"); collect.disabled = !selectedLoraIds.size; collect.onclick = () => openLoraCollectionPicker([...selectedLoraIds]);
+        selection.append(count, selectView, clear, collect); tools.append(selection);
+    }
 }
 
 function fact(label, value, title = "") {
@@ -468,6 +887,8 @@ async function openDetail(assetId) {
 function widget(node, name) { return node?.widgets?.find(item => item.name === name); }
 function setWidget(node, name, value) { const item = widget(node, name); if (!item) return false; item.value = value; try { item.callback?.(value); } catch (error) {} node.setDirtyCanvas?.(true, true); return true; }
 function findLoader() { const nodes = app.graph?._nodes || []; return LOADER_TYPES.map(type => nodes.find(node => node.type === type)).find(Boolean); }
+function findOutputs() { return (app.graph?._nodes || []).filter(node => node.type === OUTPUT_TYPE); }
+function widgetConnected(node, name) { const input = node?.inputs?.find(item => item.widget?.name === name || item.name === name); return input?.link != null || (Array.isArray(input?.links) && input.links.length > 0); }
 function activeLoaderLora() { return String(widget(findLoader(), "main_lora")?.value || "").trim(); }
 function normalizedLoraPath(value) { return String(value || "").replace(/&(?:amp;)*#x2f;/gi, "/").replaceAll("\\", "/").replace(/^\/+/, "").toLocaleLowerCase(); }
 function loaderFolderForLora(value) {
@@ -484,18 +905,67 @@ function civitaiPage(detail) {
     return `https://civitai.com/models/${encodeURIComponent(modelId)}${versionId ? `?modelVersionId=${encodeURIComponent(versionId)}` : ""}`;
 }
 
-async function loadIntoLoader(lora) {
+async function loadIntoLoader(lora, focus = true, knownLoras = null) {
     const loader = findLoader();
     if (!loader) throw new Error("Add a Loader Core to the current canvas first.");
     if (!lora) throw new Error("This catalog entry is no longer inside a configured LoRA folder.");
-    const liveLoras = await request("/lora-files");
+    const liveLoras = knownLoras || await request("/lora-files");
     const canonical = liveLoras.find(value => normalizedLoraPath(value) === normalizedLoraPath(lora));
     if (!canonical) throw new Error("This LoRA is not present in ComfyUI's current live LoRA list. Rescan LoRA folders and try again.");
     setWidget(loader, "main_enabled", true);
     setWidget(loader, "control_after_generate", "fixed");
     setWidget(loader, "folder_name", loaderFolderForLora(canonical));
     setWidget(loader, "main_lora", canonical);
-    app.canvas?.selectNode?.(loader); app.canvas?.centerOnNode?.(loader);
+    if (focus) { app.canvas?.selectNode?.(loader); app.canvas?.centerOnNode?.(loader); }
+}
+
+async function submitLoraToQueue(asset, button = null) {
+    if (typeof app.queuePrompt !== "function") throw new Error("This ComfyUI build does not expose workflow queueing.");
+    const loader = findLoader(); if (!loader) throw new Error("Add a Loader Core to the current canvas first.");
+    const originals = captureNodeValues(loader, ["main_enabled", "folder_name", "main_lora", "control_after_generate"]);
+    try {
+        if (button) { button.disabled = true; button.textContent = "QUEUING…"; }
+        const liveLoras = await request("/lora-files");
+        await loadIntoLoader(asset.relative_lora, false, liveLoras);
+        await Promise.resolve(app.queuePrompt(0, 1));
+        if (button) { button.textContent = "QUEUED ✓"; setTimeout(() => { if (button.isConnected) { button.textContent = "QUEUE"; button.disabled = false; } }, 1100); }
+        setFeedback(`Queued ${asset.model_name} with the active workflow.`, "#69e49a");
+        return true;
+    } finally { restoreNodeValues(originals); }
+}
+
+function queueLoraAsset(asset, button) {
+    if (loraBatchQueue) { alert("The current LoRA view is already being submitted to the queue."); return; }
+    loraCardQueueChain = loraCardQueueChain.catch(() => undefined).then(() => submitLoraToQueue(asset, button)).catch(error => { button.textContent = "QUEUE"; button.disabled = false; alert(error.message || "Could not queue this LoRA."); });
+}
+
+function openLoraScopeQueueDialog() {
+    const items = visibleAssets().filter(asset => asset.relative_lora);
+    if (!items.length) { alert("The current view contains no loadable LoRAs."); return; }
+    const modal = document.createElement("div"); modal.className = "so-lib-modal"; const card = document.createElement("section"); card.className = "so-lib-form-card";
+    const title = document.createElement("h3"); title.textContent = "QUEUE CURRENT LORA VIEW";
+    const copy = document.createElement("p"); copy.textContent = `${items.length.toLocaleString()} LoRA${items.length === 1 ? "" : "s"} from ${currentScopeLabel()} will each be queued once using the workflow's current prompt, dimensions, seed behavior, sampler, and every other active setting.`;
+    const shuffle = document.createElement("label"); shuffle.className = "so-lib-toggle so-lib-yearbook-auto"; const check = document.createElement("input"); check.type = "checkbox"; check.checked = false; shuffle.append(check, document.createTextNode("Shuffle queue order"));
+    const buttons = document.createElement("div"); buttons.className = "so-lib-form-actions"; const cancel = action("Cancel", "#8c8295"); const start = action(`QUEUE ${items.length.toLocaleString()}`, "#b89aff"); cancel.onclick = () => modal.remove();
+    start.onclick = () => { modal.remove(); void queueLoraScope(items, check.checked); }; buttons.append(cancel, start); card.append(title, copy, shuffle, buttons); modal.append(card); document.body.append(modal); modal.onclick = event => { if (event.target === modal) modal.remove(); };
+}
+
+async function queueLoraScope(sourceItems, shuffleOrder = false) {
+    if (loraBatchQueue) return;
+    if (typeof app.queuePrompt !== "function") { alert("This ComfyUI build does not expose workflow queueing."); return; }
+    const loader = findLoader(); if (!loader) { alert("Add a Loader Core to the current canvas first."); return; }
+    const run = { stopped: false, queued: 0, skipped: 0, total: sourceItems.length }; loraBatchQueue = run; renderTools();
+    const originals = captureNodeValues(loader, ["main_enabled", "folder_name", "main_lora", "control_after_generate"]);
+    try {
+        const liveLoras = await request("/lora-files"); const items = shuffleOrder ? shuffled(sourceItems) : [...sourceItems];
+        for (let index = 0; index < items.length && !run.stopped; index += 1) {
+            const asset = items[index]; setFeedback(`QUEUEING ${index + 1}/${items.length} · ${asset.model_name}`, "#b89aff");
+            try { await loadIntoLoader(asset.relative_lora, false, liveLoras); await Promise.resolve(app.queuePrompt(0, 1)); run.queued += 1; }
+            catch (error) { run.skipped += 1; console.warn("[Sick Ollie LoRA Library] Queue submission skipped", asset.relative_lora, error); }
+        }
+        setFeedback(`${run.stopped ? "LoRA queue submission stopped" : "LoRA view queued"} · ${run.queued} added${run.skipped ? ` · ${run.skipped} skipped` : ""}.`, run.skipped ? "#f4ec51" : "#69e49a");
+    } catch (error) { alert(error.message || "Could not queue this LoRA view."); }
+    finally { restoreNodeValues(originals); loraBatchQueue = null; renderTools(); }
 }
 
 function captureNodeValues(node, names) { return names.map(name => ({ node, name, value: widget(node, name)?.value })).filter(item => widget(node, item.name)); }
@@ -536,17 +1006,57 @@ function restoreYearbookValues(run) {
 function stopYearbook(completed = false) {
     if (!yearbook) return;
     const previous = yearbook;
+    previous.completed = Boolean(completed);
     previous.stopped = true;
     clearYearbookTimers(previous);
     yearbook = null;
+    window.__soYearbookRunActive = false;
+
+    const executionWasLive = Boolean(previous.executionObserved || app.runningNodeId != null);
+    console.info("[Sick Ollie Yearbook] Stop requested", {
+        executionObserved: previous.executionObserved,
+        runningNodeId: app.runningNodeId ?? null,
+        activeElement: document.activeElement?.tagName || null,
+    });
+    recoverTextInputFocus();
     if (!completed && previous.queueStarted) void interruptYearbookExecution(previous);
+
     const restore = () => restoreYearbookValues(previous);
-    if (previous.queuePromise) Promise.resolve(previous.queuePromise).then(restore, restore);
-    else restore();
+    // Once the backend has begun executing the Yearbook prompt, serialization is
+    // already safely behind us. Restore immediately instead of tying UI recovery
+    // to app.queuePrompt() finishing its unrelated frontend housekeeping.
+    if (completed || executionWasLive || !previous.queuePromise) restore();
+    else Promise.resolve(previous.queuePromise).then(restore, restore);
     const button = root?.querySelector("[data-yearbook]"); if (button) { button.textContent = "Yearbook run"; button.classList.remove("active"); }
+    const theaterButton = root?.querySelector("[data-yearbook-theater]"); if (theaterButton) theaterButton.hidden = true;
+    updateYearbookTheater(previous);
     setFeedback(completed ? `Yearbook complete · ${previous.captured} captured${previous.skipped ? ` · ${previous.skipped} skipped` : ""}.` : `Yearbook stopped · ${previous.captured} captured · ${previous.skipped} skipped.`, completed && previous.skipped === 0 ? "#69e49a" : "#f4ec51");
     const field = root?.querySelector("[data-yearbook-progress]"); if (field) { field.hidden = false; field.style.setProperty("--progress", `${Math.min(100, Math.round(previous.index / previous.items.length * 100))}%`); field.textContent = completed ? `YEARBOOK COMPLETE · ${previous.captured} captured · ${previous.skipped} skipped` : `YEARBOOK STOPPED · ${previous.captured} captured · ${previous.skipped} skipped`; }
     if (completed) refreshCatalogAfterYearbook();
+}
+
+function applyYearbookRunSettings(run) {
+    if (!run) return;
+    setWidget(run.loader, "main_strength", run.strength);
+    setWidget(run.generation, "resolution_mode", "custom");
+    setWidget(run.generation, "custom_width", run.width);
+    setWidget(run.generation, "custom_height", run.height);
+    setWidget(run.generation, "seed_value", run.seed);
+    for (const output of run.outputs || []) setWidget(output, "output_root", LORA_YEARBOOK_OUTPUT_ROOT);
+}
+
+async function yearbookComfyQueueState() {
+    try {
+        const response = await fetch(api.apiURL("/queue"), { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+        const running = Array.isArray(payload?.queue_running) ? payload.queue_running.length : 0;
+        const pending = Array.isArray(payload?.queue_pending) ? payload.queue_pending.length : 0;
+        return { ok: true, running, pending, total: running + pending, idle: running + pending === 0 };
+    } catch (error) {
+        console.warn("[Sick Ollie Yearbook] Could not read ComfyUI queue state", error);
+        return { ok: false, running: 0, pending: 0, total: 0, idle: false, error };
+    }
 }
 
 function setYearbookCurrent() {
@@ -568,25 +1078,41 @@ function setYearbookCurrent() {
     updateYearbookProgress();
     scheduleYearbook(run, () => {
         setWidget(run.loader, "main_lora", loraPath);
+        applyYearbookRunSettings(run);
         const strength = widget(run.loader, "main_strength")?.value;
         console.info(`[Sick Ollie Yearbook] Prepared ${run.index + 1}/${run.items.length}`, { lora: loraPath, strength });
         setFeedback(`Yearbook ${run.index + 1}/${run.items.length} · ${item.model_name}${strength !== undefined ? ` · strength ${strength}` : ""}`, "#48e8ee");
         if (!run.autoQueue) return;
-        scheduleYearbook(run, () => {
+        scheduleYearbook(run, async () => {
             if (typeof app.queuePrompt !== "function") {
                 updateYearbookProgress("YEARBOOK ERROR · This ComfyUI build does not expose automatic queueing.");
                 stopYearbook(false);
                 return;
             }
+            const queueState = await yearbookComfyQueueState();
+            if (!run || run.stopped || yearbook !== run) return;
+            if (!queueState.idle) {
+                run.waitingForQueue = true;
+                run.queueStarted = false;
+                const queueCopy = queueState.ok
+                    ? `${queueState.running ? `${queueState.running} running` : ""}${queueState.running && queueState.pending ? " · " : ""}${queueState.pending ? `${queueState.pending} pending` : ""}`
+                    : "queue status unavailable";
+                updateYearbookProgress(`YEARBOOK · WAITING FOR COMFYUI QUEUE · ${queueCopy}`);
+                setFeedback("Yearbook is waiting for the existing ComfyUI queue to clear before it claims a thumbnail.", "#f4ec51");
+                scheduleYearbook(run, setYearbookCurrent, queueState.ok ? 900 : 1400);
+                return;
+            }
+            run.waitingForQueue = false;
             console.info("[Sick Ollie Yearbook] Queueing prompt");
             run.queueStarted = true;
+            run.executionObserved = false;
             let queued;
             try { queued = app.queuePrompt(0, 1); }
-            catch (error) { updateYearbookProgress(`YEARBOOK ERROR · ${error.message}`); stopYearbook(false); return; }
+            catch (error) { run.queueStarted = false; updateYearbookProgress(`YEARBOOK ERROR · ${error.message}`); stopYearbook(false); return; }
             run.queuePromise = Promise.resolve(queued);
             run.queuePromise.then(
                 () => { if (run.stopped) void interruptYearbookExecution(run, true); },
-                error => { if (!run.stopped && yearbook === run) { updateYearbookProgress(`YEARBOOK ERROR · ${error.message}`); stopYearbook(false); } },
+                error => { if (!run.stopped && yearbook === run) { run.queueStarted = false; updateYearbookProgress(`YEARBOOK ERROR · ${error.message}`); stopYearbook(false); } },
             );
         }, 140);
     }, 120);
@@ -598,18 +1124,93 @@ function shuffled(values) {
     return result;
 }
 
+function yearbookEpochNumber(asset) {
+    const rawEpoch = asset?.epoch;
+    const stored = rawEpoch === null || rawEpoch === undefined || rawEpoch === "" ? NaN : Number(rawEpoch);
+    if (Number.isInteger(stored) && stored >= 0) return stored;
+    const filename = String(asset?.relative_lora || asset?.model_name || "").replaceAll("\\", "/").split("/").pop()?.replace(/\.[^.]+$/, "") || "";
+    const explicit = filename.match(/(?:^|[_\-\s])(?:epoch|ep)[_\-\s]?(\d+)(?=$|[_\-\s.])/i);
+    if (explicit) return Number(explicit[1]);
+    const checkpoint = filename.match(/(?:^|[_\-\s])(\d{3,})(?=$|[_\-\s.])/);
+    return checkpoint ? Number(checkpoint[1]) : null;
+}
+
+function yearbookIncrementalOrder(values) {
+    return [...values].sort((a, b) => {
+        const aEpoch = yearbookEpochNumber(a); const bEpoch = yearbookEpochNumber(b);
+        if (aEpoch != null && bEpoch != null && aEpoch !== bEpoch) return aEpoch - bEpoch;
+        if (aEpoch != null && bEpoch == null) return -1;
+        if (aEpoch == null && bEpoch != null) return 1;
+        const aPath = String(a?.relative_lora || a?.model_name || "");
+        const bPath = String(b?.relative_lora || b?.model_name || "");
+        return aPath.localeCompare(bPath, undefined, { sensitivity: "base", numeric: true });
+    });
+}
+
+function orderedYearbookItems(values, orderMode) {
+    if (orderMode === "epoch_ascending") return yearbookIncrementalOrder(values);
+    if (orderMode === "current_view") return [...values];
+    return shuffled(values);
+}
+
 function openYearbookDialog() {
-    if (yearbook) { if (confirm("Stop the active yearbook run? The current Yearbook generation will be interrupted and no next item will be queued.")) stopYearbook(false); return; }
+    if (!yearbook && window.__soCreativeLibraryRunActive) { alert("Stop the active Creative Library Catalog Run before starting Yearbook."); return; }
+    // The active button is already explicitly labelled “Stop yearbook”. Keep the
+    // cancellation path inside our own UI instead of introducing a native modal.
+    if (yearbook) { stopYearbook(false); return; }
     const visible = visibleAssets().filter(asset => asset.relative_lora);
     if (!visible.length) { alert("The current filters contain no loadable LoRAs."); return; }
-    const loader = findLoader(); const prompt = (app.graph?._nodes || []).find(node => node.type === PROMPT_TYPE); const generation = (app.graph?._nodes || []).find(node => node.type === GENERATION_TYPE);
+    const loader = findLoader(); const prompt = (app.graph?._nodes || []).find(node => node.type === PROMPT_TYPE); const generation = (app.graph?._nodes || []).find(node => node.type === GENERATION_TYPE); const outputs = findOutputs();
     if (!loader || !prompt || !generation) { alert("Studio Loader Core, Prompt Core, and Generation Core must be on the current canvas for a yearbook run."); return; }
+    if (outputs.some(output => widgetConnected(output, "output_root"))) { alert("Output Core's Output root is connected. Disconnect it before Yearbook so generated files can be routed into the dedicated LoRA Library folder."); return; }
     const modal = document.createElement("div"); modal.className = "so-lib-modal";
-    const card = document.createElement("section"); card.className = "so-lib-form-card";
+    const card = document.createElement("section"); card.className = "so-lib-form-card so-lib-yearbook-card";
     const title = document.createElement("h3"); title.textContent = "YEARBOOK THUMBNAIL RUN";
-    const currentStrength = widget(loader, "main_strength")?.value;
-    const copy = document.createElement("p"); copy.textContent = `${visible.length.toLocaleString()} LoRAs are in the filtered scope. Choose exactly which thumbnail source Yearbook should fill or replace. The runner shuffles them, keeps your current Loader strength${currentStrength !== undefined ? ` (${currentStrength})` : ""}, captures Preview Core's first displayed image, and restores only the temporary Yearbook prompt/resolution values afterward.`;
+    const copy = document.createElement("p"); copy.textContent = `${visible.length.toLocaleString()} LoRAs are in the filtered scope. Yearbook uses the comparison settings below and keeps generated files under output/${LORA_YEARBOOK_OUTPUT_ROOT}. Your original Loader, Prompt, Generation, and Output values return when the run ends.`;
+
+    const settingsTitle = document.createElement("div"); settingsTitle.className = "so-lib-form-section-title"; settingsTitle.textContent = "COMPARISON SETTINGS";
+    const settings = document.createElement("div"); settings.className = "so-lib-yearbook-settings";
+
+    const strengthField = document.createElement("label"); strengthField.className = "so-lib-yearbook-setting";
+    const strengthLabel = document.createElement("span"); strengthLabel.textContent = "LoRA strength";
+    const strengthInput = document.createElement("input"); strengthInput.type = "number"; strengthInput.min = "-100"; strengthInput.max = "100"; strengthInput.step = "0.01"; strengthInput.value = String(YEARBOOK_DEFAULT_STRENGTH); strengthInput.className = "so-lib-number-input";
+    const strengthHint = document.createElement("small"); strengthHint.textContent = "Applied to every LoRA in this run.";
+    strengthField.append(strengthLabel, strengthInput, strengthHint);
+
+    const dimensionsField = document.createElement("div"); dimensionsField.className = "so-lib-yearbook-setting so-lib-yearbook-dimensions";
+    const dimensionsLabel = document.createElement("span"); dimensionsLabel.textContent = "Dimensions";
+    const dimensionPreset = selectControl(YEARBOOK_DIMENSION_PRESETS.map(([value, label]) => [value, label]), "400x500", () => {});
+    dimensionPreset.classList.add("so-lib-yearbook-preset");
+    const dimensionsRow = document.createElement("div"); dimensionsRow.className = "so-lib-dimension-row";
+    const widthInput = document.createElement("input"); widthInput.type = "number"; widthInput.min = "16"; widthInput.max = "16384"; widthInput.step = "8"; widthInput.value = "400"; widthInput.className = "so-lib-number-input"; widthInput.title = "Width";
+    const by = document.createElement("span"); by.textContent = "×";
+    const heightInput = document.createElement("input"); heightInput.type = "number"; heightInput.min = "16"; heightInput.max = "16384"; heightInput.step = "8"; heightInput.value = "500"; heightInput.className = "so-lib-number-input"; heightInput.title = "Height";
+    dimensionsRow.append(widthInput, by, heightInput);
+    const dimensionsHint = document.createElement("small"); dimensionsHint.textContent = "Presets fill the exact width × height. Edit either field for Custom.";
+    const applyDimensionPreset = () => {
+        const preset = YEARBOOK_DIMENSION_PRESETS.find(([value]) => value === dimensionPreset.value);
+        if (!preset || preset[0] === "custom") return;
+        widthInput.value = String(preset[2]); heightInput.value = String(preset[3]);
+    };
+    dimensionPreset.onchange = applyDimensionPreset;
+    const markCustom = () => {
+        const exact = YEARBOOK_DIMENSION_PRESETS.find(([, , width, height]) => width === Number(widthInput.value) && height === Number(heightInput.value));
+        dimensionPreset.value = exact ? exact[0] : "custom";
+    };
+    widthInput.oninput = markCustom; heightInput.oninput = markCustom;
+    dimensionsField.append(dimensionsLabel, dimensionPreset, dimensionsRow, dimensionsHint);
+
+    const seedField = document.createElement("label"); seedField.className = "so-lib-yearbook-setting";
+    const seedLabel = document.createElement("span"); seedLabel.textContent = "Seed";
+    const seedInput = document.createElement("input"); seedInput.type = "number"; seedInput.min = "-1"; seedInput.max = "1125899906842624"; seedInput.step = "1"; seedInput.value = String(YEARBOOK_DEFAULT_SEED); seedInput.className = "so-lib-number-input so-lib-seed-input";
+    const seedHint = document.createElement("small"); seedHint.textContent = "Fixed seed keeps every LoRA directly comparable. −1 = random.";
+    seedField.append(seedLabel, seedInput, seedHint);
+    settings.append(strengthField, dimensionsField, seedField);
+
+    const promptTitle = document.createElement("div"); promptTitle.className = "so-lib-form-section-title"; promptTitle.textContent = "YEARBOOK PROMPT";
     const textarea = document.createElement("textarea"); textarea.className = "so-lib-textarea"; textarea.value = localStorage.getItem(YEARBOOK_PROMPT_KEY) || DEFAULT_YEARBOOK_PROMPT;
+
+    const modeTitle = document.createElement("div"); modeTitle.className = "so-lib-form-section-title"; modeTitle.textContent = "THUMBNAIL ACTION";
     const modeCounts = Object.fromEntries(["missing", "civitai", "generated", "non_yearbook", "yearbook", "all"].map(mode => [mode, yearbookTargets(visible, mode).length]));
     const modeSelect = selectControl([
         ["missing", `Fill missing thumbnails · ${modeCounts.missing}`],
@@ -619,34 +1220,69 @@ function openYearbookDialog() {
         ["yearbook", `Rebuild existing Yearbook thumbnails · ${modeCounts.yearbook}`],
         ["all", `Replace every thumbnail · ${modeCounts.all}`],
     ], "missing", () => {});
-    const modeCopy = document.createElement("p"); modeCopy.textContent = "Standardize non-Yearbook fills missing entries and replaces Civitai, generated, local-preview, and other automatic thumbnails while preserving custom images and existing Yearbook thumbnails.";
-    const auto = document.createElement("label"); auto.className = "so-lib-toggle"; const autoCheck = document.createElement("input"); autoCheck.type = "checkbox"; autoCheck.checked = true; auto.append(autoCheck, document.createTextNode("Queue each next generation automatically"));
+    const modeCopy = document.createElement("p"); modeCopy.className = "so-lib-yearbook-note"; modeCopy.textContent = "Standardize non-Yearbook fills missing entries and replaces Civitai, generated, local-preview, and other automatic thumbnails while preserving custom images and existing Yearbook thumbnails.";
+    const scopedEpochs = [...new Set(visible.map(yearbookEpochNumber).filter(value => value != null))].sort((a, b) => a - b);
+    const incrementalDefault = !collectionScope && folderScope !== ALL_FOLDERS && scopedEpochs.length >= 2;
+    const orderTitle = document.createElement("div"); orderTitle.className = "so-lib-form-section-title"; orderTitle.textContent = "RUN ORDER";
+    const epochRange = scopedEpochs.length ? ` · ${scopedEpochs[0]} → ${scopedEpochs.at(-1)}` : "";
+    const orderSelect = selectControl([
+        ["epoch_ascending", `Incremental epoch/checkpoint · low → high${epochRange}`],
+        ["current_view", "Current filtered view order"],
+        ["shuffle", "Shuffle"],
+    ], incrementalDefault ? "epoch_ascending" : "shuffle", () => {});
+    const orderCopy = document.createElement("p"); orderCopy.className = "so-lib-yearbook-note"; orderCopy.textContent = incrementalDefault
+        ? `This folder contains ${scopedEpochs.length} numbered epochs/checkpoints, so Yearbook will start at the lowest and work upward.`
+        : "Incremental order reads explicit epoch/ep numbers and common zero-padded checkpoint suffixes. Unnumbered files follow afterward in natural filename order.";
+    const auto = document.createElement("label"); auto.className = "so-lib-toggle so-lib-yearbook-auto"; const autoCheck = document.createElement("input"); autoCheck.type = "checkbox"; autoCheck.checked = true; auto.append(autoCheck, document.createTextNode("Queue each next generation automatically"));
+    const theaterToggle = document.createElement("label"); theaterToggle.className = "so-lib-toggle so-lib-yearbook-auto"; const theaterCheck = document.createElement("input"); theaterCheck.type = "checkbox"; theaterCheck.checked = yearbookTheaterEnabledByDefault(); theaterToggle.append(theaterCheck, document.createTextNode("Open Theater Mode · Live"));
     const buttons = document.createElement("div"); buttons.className = "so-lib-form-actions"; const cancel = action("Cancel", "#8c8295"); const start = action("Start shuffled run", "#f4ec51");
+    const updateStartLabel = () => { start.textContent = orderSelect.value === "epoch_ascending" ? "Start incremental run" : orderSelect.value === "current_view" ? "Start ordered run" : "Start shuffled run"; };
+    orderSelect.onchange = updateStartLabel; updateStartLabel();
     const closeModal = () => { releaseFocusInside(modal); modal.remove(); };
     cancel.onclick = closeModal; start.onclick = async () => {
         const targetMode = modeSelect.value;
         const items = yearbookTargets(visible, targetMode);
         if (!items.length) { alert("No LoRAs in this filtered scope match the selected Yearbook target."); return; }
         const promptText = textarea.value.trim(); if (!promptText) { alert("Enter the prompt to use for the yearbook run."); return; }
+        const strength = Number(strengthInput.value);
+        const width = Math.round(Number(widthInput.value));
+        const height = Math.round(Number(heightInput.value));
+        const seed = Math.trunc(Number(seedInput.value));
+        if (!Number.isFinite(strength) || strength < -100 || strength > 100) { alert("LoRA strength must be a number from -100 to 100."); return; }
+        if (!Number.isFinite(width) || width < 16 || width > 16384 || !Number.isFinite(height) || height < 16 || height > 16384) { alert("Yearbook width and height must each be between 16 and 16384 pixels."); return; }
+        if (!Number.isFinite(seed) || seed < -1 || seed > 1125899906842624) { alert("Seed must be -1 for random or a whole number from 0 to 1125899906842624."); return; }
         start.disabled = true; start.textContent = "Reading live LoRA list…";
         let liveLoras;
         try { liveLoras = await request("/lora-files"); }
-        catch (error) { alert(`Could not read ComfyUI's live LoRA list: ${error.message}`); start.disabled = false; start.textContent = "Start shuffled run"; return; }
+        catch (error) { alert(`Could not read ComfyUI's live LoRA list: ${error.message}`); start.disabled = false; updateStartLabel(); return; }
         localStorage.setItem(YEARBOOK_PROMPT_KEY, promptText);
+        localStorage.setItem(YEARBOOK_THEATER_ENABLED_KEY, theaterCheck.checked ? "true" : "false");
         const originals = [
-            ...captureNodeValues(loader, ["main_enabled", "main_lora", "control_after_generate"]),
+            ...captureNodeValues(loader, ["main_enabled", "main_lora", "main_strength", "control_after_generate"]),
             ...captureNodeValues(prompt, ["prompt_source", "manual_prompt"]),
-            ...captureNodeValues(generation, ["resolution_mode", "aspect_preset", "megapixels"]),
+            ...captureNodeValues(generation, ["resolution_mode", "custom_width", "custom_height", "aspect_preset", "megapixels", "seed_value"]),
+            ...outputs.flatMap(output => captureNodeValues(output, ["output_root"])),
         ];
         setWidget(loader, "main_enabled", true); setWidget(loader, "control_after_generate", "fixed");
         setWidget(prompt, "prompt_source", "manual"); setWidget(prompt, "manual_prompt", promptText);
-        setWidget(generation, "resolution_mode", "preset"); setWidget(generation, "aspect_preset", "3:4 (Portrait Standard)"); setWidget(generation, "megapixels", 1.0);
-        const run = { runId: ++yearbookRunSerial, items: shuffled(items), liveLoras, index: 0, captured: 0, skipped: 0, replace: targetMode !== "missing", targetMode, autoQueue: autoCheck.checked, loader, prompt, originals, timers: new Set(), stopped: false, restored: false, queuePromise: null, queueStarted: false, interruptRequested: false };
+        for (const output of outputs) setWidget(output, "output_root", LORA_YEARBOOK_OUTPUT_ROOT);
+        const orderMode = orderSelect.value;
+        const run = { runId: ++yearbookRunSerial, items: orderedYearbookItems(items, orderMode), liveLoras, index: 0, captured: 0, skipped: 0, replace: targetMode !== "missing", targetMode, orderMode, autoQueue: autoCheck.checked, theaterEnabled: theaterCheck.checked, theater: null, completed: false, loader, prompt, generation, outputs, strength, width, height, seed, originals, timers: new Set(), stopped: false, restored: false, queuePromise: null, queueStarted: false, waitingForQueue: false, executionObserved: false, interruptRequested: false };
+        applyYearbookRunSettings(run);
         yearbook = run;
+        window.__soYearbookRunActive = true;
+        sortMode = "thumbnail_newest";
+        thumbnailFilter = "";
+        galleryPage = 0;
         textarea.blur(); closeModal(); const button = root?.querySelector("[data-yearbook]"); if (button) { button.textContent = "Stop yearbook"; button.classList.add("active"); }
+        const theaterButton = root?.querySelector("[data-yearbook-theater]"); if (theaterButton) { theaterButton.hidden = !run.theaterEnabled; theaterButton.disabled = false; }
+        renderTools(); renderList(); root?.querySelector("[data-list]")?.scrollTo?.({ top: 0 });
+        if (run.theaterEnabled) openYearbookTheater(run);
         updateYearbookProgress(); scheduleYearbook(run, setYearbookCurrent, 180);
     };
-    buttons.append(cancel, start); card.append(title, copy, textarea, modeSelect, modeCopy, auto, buttons); modal.append(card); document.body.append(modal); isolateTextInput(modal); modal.onclick = event => { if (event.target === modal) closeModal(); }; textarea.focus();
+    buttons.append(cancel, start);
+    card.append(title, copy, settingsTitle, settings, promptTitle, textarea, modeTitle, modeSelect, modeCopy, orderTitle, orderSelect, orderCopy, auto, theaterToggle, buttons);
+    modal.append(card); document.body.append(modal); isolateTextInput(modal); strengthInput.focus(); strengthInput.select();
 }
 
 function catalogMaintenanceScope(scope) {
@@ -732,15 +1368,21 @@ async function handlePreviewExecuted(event) {
     if (!image?.filename || !key || (key === lastPreviewKey && now - lastPreviewAt < 800)) return;
     lastPreviewKey = key; lastPreviewAt = now;
     if (yearbook) {
+        if (yearbook.autoQueue && (!yearbook.queueStarted || yearbook.waitingForQueue)) return;
         const item = yearbook.items[yearbook.index]; if (!item) return;
         try {
             const result = await savePreviewThumbnail(image, { assetId: item.asset_id, replace: yearbook.replace, source: "generated:yearbook" });
             if (!result.skipped) updateCachedThumbnail(item.asset_id, result.thumbnail);
             yearbook.captured += 1;
+            appendYearbookTheaterEntry(yearbook, item, result.thumbnail);
+            yearbook.queueStarted = false;
+            yearbook.queuePromise = null;
+            yearbook.executionObserved = false;
             yearbook.index += 1; setYearbookCurrent();
         } catch (error) { updateYearbookProgress(`YEARBOOK ERROR · ${item.model_name}: ${error.message}`); alert(`Yearbook thumbnail failed for ${item.model_name}: ${error.message}`); stopYearbook(false); }
         return;
     }
+    if (window.__soCreativeLibraryRunActive) return;
     if (!autoFirstEnabled()) return;
     const lora = activeLoaderLora(); if (!lora || lora === "[None]") return;
     try { const result = await savePreviewThumbnail(image, { lora, replace: false, source: "generated:auto-first" }); if (!result.skipped) { updateCachedThumbnail(result.asset_id, result.thumbnail); setFeedback(`Captured the first generated thumbnail for ${lora}.`); } }
@@ -755,9 +1397,30 @@ async function handleManualThumbnail(event) {
     catch (error) { alert(error.message || "Could not set the LoRA thumbnail."); }
 }
 
+function updateScanButton() {
+    const scan = root?.querySelector("[data-scan-folders]"); if (!scan) return;
+    const inCollection = Boolean(collectionScope);
+    scan.disabled = inCollection;
+    scan.textContent = inCollection ? "Scan unavailable in collection" : folderScope === ALL_FOLDERS ? "Scan LoRA folders" : "Scan current folder";
+    scan.title = inCollection ? "Choose a physical folder in the sidebar before scanning" : folderScope === ALL_FOLDERS ? "Scan every configured LoRA root" : `Scan ${folderScope} and its nested folders only`;
+}
+
+async function scanCurrentFolder(button) {
+    if (collectionScope) return;
+    const folder = folderScope === ALL_FOLDERS ? "" : folderScope;
+    button.disabled = true; button.textContent = "Scanning…";
+    try {
+        const result = await request("/scan", { method: "POST", body: { folder } }); await load();
+        setFeedback(`${folder ? `Scanned ${folder}` : "Scanned all LoRA folders"} · ${result.scanned} LoRAs · ${result.thumbnails} local thumbnails · ${result.sidecars} Civitai sidecars.`);
+    } catch (error) { setFeedback(error.message, "#ff78bd"); }
+    finally { updateScanButton(); }
+}
+
 function closeReview() {
     civitaiFilling = false;
+    const activeYearbook = yearbook;
     if (yearbook) stopYearbook(false);
+    if (activeYearbook) closeYearbookTheater(activeYearbook);
     for (const modal of document.querySelectorAll(".so-lib-modal")) {
         releaseFocusInside(modal);
         modal.remove();
@@ -765,35 +1428,87 @@ function closeReview() {
     releaseFocusInside(root);
     root?.remove();
     root = null;
+    clearLoraSelection(true);
 }
 
-async function openReview() {
-    await ensureStyle();
-    if (root) { root.querySelector(".so-lib-shell")?.focus(); return; }
+function requestedFolderScope(options) {
+    const raw = typeof options === "string" ? options : options?.folder;
+    const normalized = String(raw || "").replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
+    return normalized || ALL_FOLDERS;
+}
+
+async function openReview(options = null) {
+    const requestedCollection = typeof options === "object" && options
+        ? String(options.collection || options.collection_id || "").trim()
+        : "";
+    const hasCollectionRequest = Boolean(requestedCollection);
+    const hasFolderRequest = typeof options === "string" || Boolean(options && Object.prototype.hasOwnProperty.call(options, "folder"));
+    if (hasCollectionRequest) {
+        collectionScope = requestedCollection;
+        folderScope = ALL_FOLDERS;
+        epochFilter = "";
+        statusFilter = String(options?.status || "");
+        thumbnailFilter = "";
+        galleryPage = 0;
+    } else if (hasFolderRequest) {
+        collectionScope = "";
+        folderScope = requestedFolderScope(options);
+        epochFilter = "";
+        statusFilter = String(options?.status || "");
+        thumbnailFilter = "";
+        galleryPage = 0;
+    }
+    const styles = ensureStyle();
+    if (root) {
+        root.querySelector(".so-lib-shell")?.focus();
+        try { await load(); } catch (error) { setFeedback(error.message, "#ff78bd"); }
+        return;
+    }
     root = document.createElement("div"); root.className = "so-lib-overlay"; isolateTextInput(root);
+    Object.assign(root.style, { position: "fixed", inset: "0", zIndex: "100020", display: "grid", placeItems: "center", padding: "16px", background: "rgba(5,3,8,.94)" });
     const panel = document.createElement("section"); panel.className = "so-lib-shell"; panel.tabIndex = -1; panel.style.setProperty("--so-lib-bg", `url(${LIBRARY_BACKGROUND_URL})`);
+    Object.assign(panel.style, { boxSizing: "border-box", width: "min(2560px,calc(100vw - 32px))", height: "min(1800px,calc(100vh - 32px))", display: "grid", gridTemplateRows: "auto auto minmax(0,1fr)", overflow: "hidden", border: "1px solid rgba(255,62,175,.42)", borderRadius: "22px", background: "#0d0a12" });
     const header = document.createElement("header"); header.className = "so-lib-header";
     const title = document.createElement("img"); title.className = "so-lib-title-image"; title.src = LIBRARY_HEADER_URL; title.alt = "Sick Ollie LoRA Library"; title.draggable = false;
     const status = document.createElement("span"); status.className = "so-lib-status"; status.dataset.reviewStatus = ""; status.textContent = "Visual catalog, test history, ratings, triggers, and compact thumbnails.";
-    const scan = action("Scan LoRA folders", "#ff3eaf"); scan.onclick = async () => { scan.disabled = true; scan.textContent = "Scanning…"; try { const result = await request("/scan", { method: "POST", body: {} }); await load(); setFeedback(`Scanned ${result.scanned} LoRAs · ${result.thumbnails} local thumbnails · ${result.sidecars} Civitai sidecars.`); } catch (error) { setFeedback(error.message, "#ff78bd"); } finally { scan.disabled = false; scan.textContent = "Scan LoRA folders"; } };
+    const scan = action("Scan LoRA folders", "#ff3eaf"); scan.dataset.scanFolders = ""; scan.onclick = () => void scanCurrentFolder(scan);
     const civitai = action("Fill from Civitai", "#9c62ff"); civitai.dataset.civitaiFill = ""; civitai.onclick = fillCivitai;
     const quarantineRejectedButton = action("Quarantine rejected", "#ff3eaf"); quarantineRejectedButton.onclick = () => quarantineRejected(quarantineRejectedButton);
     const catalogToolsButton = action("Catalog tools", "#9c62ff"); catalogToolsButton.onclick = openCatalogTools;
+    const theaterButton = action("THEATER", "#b89aff"); theaterButton.dataset.yearbookTheater = ""; theaterButton.hidden = !(yearbook?.theaterEnabled); theaterButton.onclick = () => { if (!yearbook) return; yearbook.theaterEnabled = true; openYearbookTheater(yearbook); };
     const yearbookButton = action(yearbook ? "Stop yearbook" : "Yearbook run", "#f4ec51"); yearbookButton.dataset.yearbook = ""; if (yearbook) yearbookButton.classList.add("active"); yearbookButton.onclick = openYearbookDialog;
     const x = action("×", "#48e8ee", "so-lib-icon"); x.onclick = closeReview;
-    header.append(title, status, scan, civitai, quarantineRejectedButton, catalogToolsButton, yearbookButton, x);
+    header.append(title, status, scan, civitai, quarantineRejectedButton, catalogToolsButton, theaterButton, yearbookButton, x);
     const progress = document.createElement("div"); progress.className = "so-lib-yearbook-progress"; progress.dataset.yearbookProgress = ""; progress.hidden = true;
+    const body = document.createElement("div"); body.className = "so-lib-library-body";
+    const sidebar = document.createElement("aside"); sidebar.className = "so-lib-sidebar"; sidebar.dataset.loraSidebar = "";
+    const content = document.createElement("main"); content.className = "so-lib-library-content";
     const tools = document.createElement("div"); tools.className = "so-lib-tools"; tools.dataset.tools = "";
     const list = document.createElement("div"); list.className = "so-lib-grid"; list.dataset.list = "";
-    panel.append(header, progress, tools, list); root.append(panel); document.body.append(root); updateYearbookProgress();
+    const opening = document.createElement("div"); opening.className = "so-lib-empty"; opening.textContent = "Opening LoRA Library…"; Object.assign(opening.style, { padding: "60px 24px", color: "#aaa1b3", textAlign: "center" }); list.append(opening);
+    content.append(tools, list); body.append(sidebar, content); panel.append(header, progress, body); root.append(panel); document.body.append(root); updateYearbookProgress(); updateScanButton();
     root.onclick = event => { if (event.target === root) closeReview(); };
-    try { await load(); } catch (error) { setFeedback(error.message, "#ff78bd"); }
+    // Paint the shell before stylesheet, filesystem, database, or large-catalog
+    // work. Both Loader LIB and Hub opens stay responsive on a cold cache.
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if (assets.length) { renderSidebar(); renderTools(); renderList(); updateScanButton(); }
+    try { await Promise.all([styles, load()]); } catch (error) { setFeedback(error.message, "#ff78bd"); }
 }
 
 app.registerExtension({
     name: "SickOllie.SOS.LoRALibrary",
     setup() {
         registerSoloHubItem({ id: "library-review", label: "LoRA Library", description: "Browse thumbnails, triggers, usage, ratings, Civitai showcases, and yearbook runs.", color: "#2cecff", open: openReview });
+        window.__soOpenLoRALibrary = options => openReview(options);
+        if (!window.__soLoRALibraryOpenListener) {
+            window.__soLoRALibraryOpenListener = event => void openReview(event?.detail || null);
+            window.addEventListener("sickollie:open-lora-library", window.__soLoRALibraryOpenListener);
+        }
+        if (window.__soPendingLoRALibraryRequest) {
+            const pending = window.__soPendingLoRALibraryRequest;
+            delete window.__soPendingLoRALibraryRequest;
+            void openReview(pending);
+        }
         if (!window.__soLoRALibraryPreviewListener) {
             window.__soLoRALibraryPreviewListener = handlePreviewExecuted;
             window.addEventListener("sickollie:preview-executed", window.__soLoRALibraryPreviewListener);
@@ -801,6 +1516,13 @@ app.registerExtension({
         if (!window.__soLoRAThumbnailManualListener) {
             window.__soLoRAThumbnailManualListener = handleManualThumbnail;
             window.addEventListener("sickollie:set-lora-thumbnail", window.__soLoRAThumbnailManualListener);
+        }
+        if (!window.__soLoRALibraryExecutionStartListener) {
+            window.__soLoRALibraryExecutionStartListener = () => {
+                if (yearbook?.queueStarted && !yearbook.stopped) yearbook.executionObserved = true;
+            };
+            api.addEventListener("execution_start", window.__soLoRALibraryExecutionStartListener);
+            api.addEventListener("executing", window.__soLoRALibraryExecutionStartListener);
         }
     },
     menuCommands: [{ path: ["Sick Ollie"], commands: ["solo.openLoRALibrary"] }],

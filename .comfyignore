@@ -1,10 +1,21 @@
-# Large documentation and release extras
+# GitHub documentation and optional starter extras are not required at runtime.
 docs/
 Starter Content/
 *.pdf
 
-# Development and design files
+# Development/editor/runtime artifacts.
 *.psd
 .vscode/
+.idea/
+.cache/
 __pycache__/
 *.pyc
+*.bak
+
+# Internal release evidence never belongs in the registry package.
+IMPLEMENTATION_LEDGER.md
+test-results-*.txt
+release-audit/
+internal/
+*.sqlite3
+*.tmp

@@ -7,7 +7,7 @@ const LEGACY_PREVIEW_TYPES = new Set(["SOFitPreview"]);
 const STORED_IMAGES_PROPERTY = "so_fit_preview_images";
 const STORED_INDEX_PROPERTY = "so_fit_preview_index";
 const PINNED_IMAGES_PROPERTY = "so_fit_preview_pins";
-const MAX_PINS = 6;
+const MAX_PINS = 1;
 const PREVIEW_MIN_WIDTH = 620;
 const COMPARE_GAP = 10;
 const BASE_WIDTH_PROPERTY = "so_fit_preview_base_width";
@@ -117,7 +117,7 @@ function chooseValue(event, title, values, callback) {
 
 function drawPreviewControls(node, ctx) {
     if (node.flags?.collapsed) return;
-    const x = 10, y = PREVIEW_CONTROLS_TOP, width = previewPaneWidth(node) - 20, gap = 6, rowHeight = 29;
+    const x = 10, y = PREVIEW_CONTROLS_TOP, width = previewPaneWidth(node) - 20, gap = 6, groupGap = 16, rowHeight = 29;
     node.__soPreviewHits = {};
     drawStudioSectionFrame(ctx, x - 3, y - 5, width + 6, PREVIEW_CONTROLS_HEIGHT, STUDIO_THEME.cyan, 9, .55);
     // Keep the display controls compact so the actions read as a single, useful toolbar.
@@ -126,17 +126,17 @@ function drawPreviewControls(node, ctx) {
     const colorWidth = Math.min(200, Math.max(50, Math.round(width * .11)));
     drawControl(ctx, node.__soPreviewHits, "fit", x, y, fitWidth, rowHeight, "FIT", widgetValue(node, "fit_mode", "Contain + Upscale"), STUDIO_THEME.cyan);
     drawControl(ctx, node.__soPreviewHits, "background", x + fitWidth + gap, y, backgroundWidth, rowHeight, "BG", widgetValue(node, "background_mode", "Solid"), STUDIO_THEME.magenta);
-    drawControl(ctx, node.__soPreviewHits, "color", x + fitWidth + backgroundWidth + gap * 2, y, colorWidth, rowHeight, "BACKGROUND COLOR", widgetValue(node, "background_color", "#111111"), STUDIO_THEME.yellow);
-    const actionX = x + fitWidth + backgroundWidth + colorWidth + gap * 3;
-    const actionWidth = (width - fitWidth - backgroundWidth - colorWidth - gap * 7) / 5;
+    drawControl(ctx, node.__soPreviewHits, "color", x + fitWidth + backgroundWidth + gap * 2, y, colorWidth, rowHeight, "BACKGROUND COLOR", widgetValue(node, "background_color", "#08070c"), STUDIO_THEME.yellow);
+    const actionX = x + fitWidth + backgroundWidth + colorWidth + gap * 2 + groupGap;
+    const actionSpace = width - fitWidth - backgroundWidth - colorWidth - gap * 3 - groupGap * 2;
+    const actionWidth = actionSpace / 3.35;
+    const saveWidth = actionWidth * 1.35;
     const feedback = node.__soPreviewActionFeedback?.expiresAt > Date.now() ? node.__soPreviewActionFeedback : null;
     const actionLabel = (key, fallback) => feedback?.key === key ? feedback.message : fallback;
     const pressed = (key) => feedback?.key === key;
-    drawAction(ctx, node.__soPreviewHits, "pin", actionX, y, actionWidth, rowHeight, actionLabel("pin", "📌 PIN"), STUDIO_THEME.cyan, false, pressed("pin"));
-    drawAction(ctx, node.__soPreviewHits, "compare", actionX + (actionWidth + gap), y, actionWidth, rowHeight, actionLabel("compare", "◫ COMPARE"), STUDIO_THEME.magenta, Boolean(node.properties?.so_fit_preview_compare), pressed("compare"));
-    drawAction(ctx, node.__soPreviewHits, "clear", actionX + (actionWidth + gap) * 2, y, actionWidth, rowHeight, actionLabel("clear", "CLEAR"), STUDIO_THEME.yellow, false, pressed("clear"));
-    drawAction(ctx, node.__soPreviewHits, "library", actionX + (actionWidth + gap) * 3, y, actionWidth, rowHeight, actionLabel("library", "★ LIBRARY THUMB"), STUDIO_THEME.magenta, false, pressed("library"));
-    drawAction(ctx, node.__soPreviewHits, "recipe", actionX + (actionWidth + gap) * 4, y, actionWidth, rowHeight, actionLabel("recipe", "📚 RECIPE"), STUDIO_THEME.green, false, pressed("recipe"));
+    drawAction(ctx, node.__soPreviewHits, "compare", actionX, y, actionWidth, rowHeight, actionLabel("compare", "📌 PIN + COMPARE"), STUDIO_THEME.magenta, Boolean(node.properties?.so_fit_preview_compare), pressed("compare"));
+    drawAction(ctx, node.__soPreviewHits, "clear", actionX + actionWidth + gap, y, actionWidth, rowHeight, actionLabel("clear", "CLEAR"), STUDIO_THEME.yellow, false, pressed("clear"));
+    drawAction(ctx, node.__soPreviewHits, "save", actionX + actionWidth * 2 + gap + groupGap, y, saveWidth, rowHeight, actionLabel("save", "📚 SAVE TO LIBRARY"), STUDIO_THEME.green, false, pressed("save"));
 }
 
 function drawChecker(ctx, x, y, w, h) {
@@ -242,7 +242,7 @@ function loadPinnedImages(node) {
 
 function pinCurrentPreview(node) {
     const current = cleanImageData(node.__soFitImageData?.[node.__soFitImageIndex || 0]);
-    if (!current) return;
+    if (!current) return false;
     node.properties = node.properties || {};
     const pins = pinnedPreviewData(node).filter((item) => JSON.stringify(item) !== JSON.stringify(current));
     pins.unshift(current);
@@ -251,11 +251,13 @@ function pinCurrentPreview(node) {
     loadPinnedImages(node);
     syncCompareLayout(node);
     node.setDirtyCanvas?.(true, true);
+    return true;
 }
 
 function clearPinnedPreviews(node) {
     node.properties = node.properties || {};
     node.properties[PINNED_IMAGES_PROPERTY] = [];
+    node.properties.so_fit_preview_compare = false;
     node.__soPinnedImageKey = "";
     node.__soPinnedImages = [];
     syncCompareLayout(node);
@@ -343,7 +345,7 @@ function drawPreviewPane(node, ctx, image, x, y, width, height, placeholder, lab
     ctx.clip();
 
     const backgroundMode = widgetValue(node, "background_mode", "Solid");
-    const backgroundColor = widgetValue(node, "background_color", "#111111");
+    const backgroundColor = widgetValue(node, "background_color", "#08070c");
     if (backgroundMode === "Checkerboard") drawChecker(ctx, x, y, width, height);
     else { ctx.fillStyle = backgroundColor; ctx.fillRect(x, y, width, height); }
 
@@ -457,30 +459,23 @@ function installPreviewCore(node) {
         const hits = this.__soPreviewHits || {};
         if (pointInHit(pos, hits.fit)) { chooseValue(event, "Preview fit", FIT_MODES, value => setWidgetValue(this, "fit_mode", value)); return true; }
         if (pointInHit(pos, hits.background)) { chooseValue(event, "Preview background", BACKGROUND_MODES, value => setWidgetValue(this, "background_mode", value)); return true; }
-        if (pointInHit(pos, hits.color)) { app.canvas.prompt("Preview background color", widgetValue(this, "background_color", "#111111"), value => setWidgetValue(this, "background_color", String(value || "#111111")), event); return true; }
-        if (pointInHit(pos, hits.pin)) { pinCurrentPreview(this); previewActionFeedback(this, "pin", "✓ PINNED"); return true; }
+        if (pointInHit(pos, hits.color)) { app.canvas.prompt("Preview background color", widgetValue(this, "background_color", "#08070c"), value => setWidgetValue(this, "background_color", String(value || "#08070c")), event); return true; }
         if (pointInHit(pos, hits.compare)) {
             this.properties = this.properties || {};
-            this.properties.so_fit_preview_compare = !Boolean(this.properties.so_fit_preview_compare);
-            syncCompareLayout(this);
-            previewActionFeedback(this, "compare", this.properties.so_fit_preview_compare ? "✓ COMPARE ON" : "✓ COMPARE OFF");
+            if (pinCurrentPreview(this)) {
+                this.properties.so_fit_preview_compare = true;
+                syncCompareLayout(this);
+                previewActionFeedback(this, "compare", "✓ COMPARING");
+            } else previewActionFeedback(this, "compare", "NO IMAGE");
             return true;
         }
         if (pointInHit(pos, hits.clear)) { clearPinnedPreviews(this); previewActionFeedback(this, "clear", "✓ CLEARED"); return true; }
-        if (pointInHit(pos, hits.library)) {
-            const previewData = cleanImageData(this.__soFitImageData?.[this.__soFitImageIndex || 0]);
-            window.dispatchEvent(new CustomEvent("sickollie:set-lora-thumbnail", {
-                detail: { source: "preview", previewData },
-            }));
-            previewActionFeedback(this, "library", "✓ THUMBNAIL SET");
-            return true;
-        }
-        if (pointInHit(pos, hits.recipe)) {
+        if (pointInHit(pos, hits.save)) {
             const previewData = cleanImageData(this.__soFitImageData?.[this.__soFitImageIndex || 0]);
             window.dispatchEvent(new CustomEvent("sickollie:save-studio-recipe", {
-                detail: { source: "preview", defaultName: "New prompt recipe", previewData },
+                detail: { source: "preview", defaultName: "New saved prompt", previewData },
             }));
-            previewActionFeedback(this, "recipe", "✓ RECIPE SAVED");
+            previewActionFeedback(this, "save", "✓ SAVED");
             return true;
         }
         return originalMouseDown?.apply(this, arguments);

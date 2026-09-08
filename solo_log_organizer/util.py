@@ -94,7 +94,7 @@ def load_json(path: str | Path, fallback: Any) -> Any:
 def walk_text_files(root: str, cancel: Event | None = None) -> Iterator[str]:
     ignored = {
         "_solo_log_organizer", "_promptsorter_backups", "_promptsorter_archive",
-        "_promptsorter_data", "__pycache__",
+        "_promptsorter_data", "__pycache__", "recipe library", "creative library",
     }
     pending = [os.path.abspath(root)]
     while pending:

@@ -1,0 +1,856 @@
+[
+  {
+    "id": "F001",
+    "feature": "Diffusion model / Weight",
+    "behavior": "Choose installed diffusion model and weight representation.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F002",
+    "feature": "Model After generate",
+    "behavior": "Cycle diffusion models independently through Fixed, Increment, Decrement, Randomize or Shuffle.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F003",
+    "feature": "Folder scope and Include subfolders",
+    "behavior": "Limit the Main LoRA pool to a physical directory with optional descendants.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F004",
+    "feature": "LoRA Collection scope",
+    "behavior": "Use a virtual LoRA group without moving model files.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F005",
+    "feature": "LIB scope jump",
+    "behavior": "Open LoRA Library in the active physical folder or Collection.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F006",
+    "feature": "Main LoRA / Enabled / Strength",
+    "behavior": "Select the primary LoRA, disable it, or adjust its influence.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F007",
+    "feature": "Epoch filter",
+    "behavior": "Narrow eligible checkpoint files before cycling.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F008",
+    "feature": "Favorite / Keep / Retest / Reject",
+    "behavior": "Review the active LoRA directly on the node.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F009",
+    "feature": "Library filter and usage sorting",
+    "behavior": "Browse by review state, name, frequency, or recency of use.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F010",
+    "feature": "Clean name click",
+    "behavior": "Choose a cleanup mode for portable identity and output naming.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F011",
+    "feature": "Main After generate / Skip None",
+    "behavior": "Advance through the selected Main LoRA pool.",
+    "manual_section": "loader",
+    "reference_page": 37
+  },
+  {
+    "id": "F012",
+    "feature": "Advanced Loop cycle / Off name",
+    "behavior": "Control end-of-pool looping and the disabled-LoRA name.",
+    "manual_section": "loader",
+    "reference_page": 38
+  },
+  {
+    "id": "F013",
+    "feature": "Dynamic secondary stack",
+    "behavior": "Add up to ten secondary LoRAs with independent enable, strength, copy, edit, info and remove controls.",
+    "manual_section": "secondary",
+    "reference_page": 38
+  },
+  {
+    "id": "F014",
+    "feature": "Automatic trigger discovery",
+    "behavior": "Read explicit embedded evidence, training tags and safe Civitai fallback; model titles are not activation phrases.",
+    "manual_section": "triggers",
+    "reference_page": 38
+  },
+  {
+    "id": "F015",
+    "feature": "Trigger copy and info",
+    "behavior": "Click the trigger value to copy; info opens model details.",
+    "manual_section": "triggers",
+    "reference_page": 38
+  },
+  {
+    "id": "F016",
+    "feature": "Exact persistent trigger override",
+    "behavior": "Save a durable activation phrase for one LoRA.",
+    "manual_section": "triggers",
+    "reference_page": 38
+  },
+  {
+    "id": "F017",
+    "feature": "Matching epoch family override",
+    "behavior": "Vary only the epoch/ep numeric token in the same folder; future matching files inherit the rule.",
+    "manual_section": "triggers",
+    "reference_page": 38
+  },
+  {
+    "id": "F018",
+    "feature": "Exact > family > automatic priority",
+    "behavior": "Resolve a predictable effective trigger without overwriting more specific choices.",
+    "manual_section": "triggers",
+    "reference_page": 38
+  },
+  {
+    "id": "F019",
+    "feature": "Disabled Main trigger suppression",
+    "behavior": "An inactive or zero-strength Main LoRA supplies no live trigger.",
+    "manual_section": "triggers",
+    "reference_page": 38
+  },
+  {
+    "id": "F020",
+    "feature": "Manual / Prompt Input / Prompt Log",
+    "behavior": "Keep a prompt wire attached while choosing a separate Manual draft or a log.",
+    "manual_section": "prompt",
+    "reference_page": 38
+  },
+  {
+    "id": "F021",
+    "feature": "Prompt Input socket",
+    "behavior": "Receive Final Prompt or Source Prompt from Image Metadata Core.",
+    "manual_section": "metadata",
+    "reference_page": 38
+  },
+  {
+    "id": "F022",
+    "feature": "Manual Outfit A/B/C and Scene",
+    "behavior": "Type fixed component values independently of the main prompt source.",
+    "manual_section": "prompt",
+    "reference_page": 38
+  },
+  {
+    "id": "F023",
+    "feature": "Collection-backed component logs",
+    "behavior": "Choose Wardrobe, Looks or Scene Collections as live pools with stable identities.",
+    "manual_section": "outfits",
+    "reference_page": 39
+  },
+  {
+    "id": "F024",
+    "feature": "Outfit A/B/C / Scene placement",
+    "behavior": "Choose Auto, Placeholder, Beginning, End or Off per component.",
+    "manual_section": "assembly",
+    "reference_page": 39
+  },
+  {
+    "id": "F025",
+    "feature": "NAME / configurable ITEM or BRAND",
+    "behavior": "Edit the placeholder label and replacement value; configure ITEM to BRAND when needed.",
+    "manual_section": "assembly",
+    "reference_page": 39
+  },
+  {
+    "id": "F026",
+    "feature": "Colored placeholder rendering",
+    "behavior": "Use token colors to read the assembly; substitution remains case-sensitive.",
+    "manual_section": "discoveries",
+    "reference_page": 39
+  },
+  {
+    "id": "F027",
+    "feature": "Clickable assembly status chips",
+    "behavior": "Click component chips for placement; click TRIGGER for Trigger Builder.",
+    "manual_section": "discoveries",
+    "reference_page": 39
+  },
+  {
+    "id": "F028",
+    "feature": "Clickable placeholder / configuration values",
+    "behavior": "Edit tokens and local values directly on dashboard rows.",
+    "manual_section": "discoveries",
+    "reference_page": 39
+  },
+  {
+    "id": "F029",
+    "feature": "Linked value source pulse",
+    "behavior": "Click a connected value to highlight the supplying node.",
+    "manual_section": "discoveries",
+    "reference_page": 39
+  },
+  {
+    "id": "F030",
+    "feature": "Prefix / Suffix toggle and editor",
+    "behavior": "Add reusable affixes with independent toggles, including connected text sources.",
+    "manual_section": "assembly",
+    "reference_page": 39
+  },
+  {
+    "id": "F031",
+    "feature": "Affix placeholder resolution and progression",
+    "behavior": "Resolve components across prefix, source and suffix, and advance used log streams.",
+    "manual_section": "assembly",
+    "reference_page": 39
+  },
+  {
+    "id": "F032",
+    "feature": "Log browser / line index / recovery",
+    "behavior": "Browse source logs, choose a line and recover missing log references.",
+    "manual_section": "prompt",
+    "reference_page": 39
+  },
+  {
+    "id": "F033",
+    "feature": "Fixed / Increment / Decrement / Randomize / Shuffle",
+    "behavior": "Advance active log streams after queueing; Manual components remain fixed.",
+    "manual_section": "automation",
+    "reference_page": 39
+  },
+  {
+    "id": "F034",
+    "feature": "Resolved prompt copy",
+    "behavior": "Copy the complete assembled text rather than reconstructing it.",
+    "manual_section": "discoveries",
+    "reference_page": 40
+  },
+  {
+    "id": "F035",
+    "feature": "Advanced separator and cleanup",
+    "behavior": "Tune text joining and optional regex cleanup only when necessary.",
+    "manual_section": "assembly",
+    "reference_page": 40
+  },
+  {
+    "id": "F036",
+    "feature": "Trigger Builder and placement",
+    "behavior": "Follow Loader or choose a candidate; placement controls actual insertion.",
+    "manual_section": "triggers",
+    "reference_page": 40
+  },
+  {
+    "id": "F037",
+    "feature": "Save / clear active LoRA override",
+    "behavior": "Persist an override from Prompt Core and return to Loader resolution when cleared.",
+    "manual_section": "triggers",
+    "reference_page": 40
+  },
+  {
+    "id": "F038",
+    "feature": "Text encoder / VAE",
+    "behavior": "Select local files compatible with the diffusion model.",
+    "manual_section": "generation",
+    "reference_page": 40
+  },
+  {
+    "id": "F039",
+    "feature": "External positive / negative conditioning",
+    "behavior": "Use supplied conditioning; positive overrides internal text encoding, negative otherwise uses an empty fallback.",
+    "manual_section": "advanced",
+    "reference_page": 40
+  },
+  {
+    "id": "F040",
+    "feature": "Preset / custom dimensions / swap / batch",
+    "behavior": "Choose aspect and megapixels or exact dimensions; swap width and height in Custom.",
+    "manual_section": "generation",
+    "reference_page": 40
+  },
+  {
+    "id": "F041",
+    "feature": "Sampler / Scheduler / Steps / CFG / Denoise / Shift",
+    "behavior": "Control sampling using settings appropriate to the selected model.",
+    "manual_section": "generation",
+    "reference_page": 40
+  },
+  {
+    "id": "F042",
+    "feature": "Random / fixed / last queued seed / copy",
+    "behavior": "Randomize each run, pick one fixed random seed, reuse the last queued seed, or copy it.",
+    "manual_section": "generation",
+    "reference_page": 40
+  },
+  {
+    "id": "F043",
+    "feature": "seed_input",
+    "behavior": "An external INT overrides the seed widget for that run; -1 randomizes.",
+    "manual_section": "metadata",
+    "reference_page": 40
+  },
+  {
+    "id": "F044",
+    "feature": "Live applied LoRA shelf",
+    "behavior": "See LoRAs actually applied, associated with the connected Loader when available.",
+    "manual_section": "generation",
+    "reference_page": 40
+  },
+  {
+    "id": "F045",
+    "feature": "Advanced CLIP type and device",
+    "behavior": "Change encoding family or device placement only when required.",
+    "manual_section": "advanced",
+    "reference_page": 41
+  },
+  {
+    "id": "F046",
+    "feature": "Latents + VAE or IMAGE saving",
+    "behavior": "Decode samples internally or save connected images, which take priority.",
+    "manual_section": "output",
+    "reference_page": 41
+  },
+  {
+    "id": "F047",
+    "feature": "Output root / filename / subfolder recipes",
+    "behavior": "Combine literal text and variables into traceable output paths.",
+    "manual_section": "output",
+    "reference_page": 41
+  },
+  {
+    "id": "F048",
+    "feature": "PNG / JPG / WebP / quality / counter",
+    "behavior": "Select a file format and naming counter; PNG ignores lossy quality.",
+    "manual_section": "output",
+    "reference_page": 41
+  },
+  {
+    "id": "F049",
+    "feature": "Prompt / Workflow / Civitai metadata toggles",
+    "behavior": "Choose which generation records accompany saved images.",
+    "manual_section": "output",
+    "reference_page": 41
+  },
+  {
+    "id": "F050",
+    "feature": "Resolved input copy / saved path",
+    "behavior": "Copy resolved values from the output dashboard.",
+    "manual_section": "discoveries",
+    "reference_page": 41
+  },
+  {
+    "id": "F051",
+    "feature": "Fit / Background / Background color",
+    "behavior": "Choose image fitting and background presentation.",
+    "manual_section": "preview",
+    "reference_page": 41
+  },
+  {
+    "id": "F052",
+    "feature": "Pin + Compare",
+    "behavior": "Capture the displayed result and open it beside the live preview in one action.",
+    "manual_section": "preview",
+    "reference_page": 41
+  },
+  {
+    "id": "F053",
+    "feature": "Clear comparison",
+    "behavior": "Remove the reference and restore the normal preview width.",
+    "manual_section": "preview",
+    "reference_page": 41
+  },
+  {
+    "id": "F054",
+    "feature": "Save to Library",
+    "behavior": "Save the verified displayed image and available generation state for reuse.",
+    "manual_section": "reuse",
+    "reference_page": 41
+  },
+  {
+    "id": "F055",
+    "feature": "Image upload / clear / optional IMAGE",
+    "behavior": "Inspect a chosen file; a genuinely connected image input takes precedence.",
+    "manual_section": "metadata",
+    "reference_page": 41
+  },
+  {
+    "id": "F056",
+    "feature": "Final / Source prompt / seed outputs",
+    "behavior": "Recover prompt text, seed, settings, models, components and reports when metadata exists.",
+    "manual_section": "metadata",
+    "reference_page": 42
+  },
+  {
+    "id": "F057",
+    "feature": "Individual copy fields / full report",
+    "behavior": "Copy available seed, Outfit A/B/C, Scene and prompt data directly.",
+    "manual_section": "metadata",
+    "reference_page": 42
+  },
+  {
+    "id": "F058",
+    "feature": "Save to Library",
+    "behavior": "Save normalized displayed metadata and its loaded image into Creative Library.",
+    "manual_section": "reuse",
+    "reference_page": 42
+  },
+  {
+    "id": "F059",
+    "feature": "Queued source lifetime",
+    "behavior": "Previously queued imports survive subsequent image loading and clearing.",
+    "manual_section": "metadata",
+    "reference_page": 42
+  },
+  {
+    "id": "F060",
+    "feature": "Templates / Prompts / Outfits / Scenes",
+    "behavior": "Browse reusable formulas, resolved prompts, outfit material and locations in four primary areas.",
+    "manual_section": "libraries",
+    "reference_page": 42
+  },
+  {
+    "id": "F061",
+    "feature": "Home vs Collection",
+    "behavior": "Home is the canonical location; Collections group assets without moving them.",
+    "manual_section": "libraries",
+    "reference_page": 42
+  },
+  {
+    "id": "F062",
+    "feature": "Template classification",
+    "behavior": "Recognized unresolved portable tokens classify an asset as a Template.",
+    "manual_section": "assembly",
+    "reference_page": 42
+  },
+  {
+    "id": "F063",
+    "feature": "TXT import / mixed routing / Original Log",
+    "behavior": "Split mixed logs line by line while retaining managed source provenance and order.",
+    "manual_section": "packs",
+    "reference_page": 42
+  },
+  {
+    "id": "F064",
+    "feature": "Search / facets / placeholder / rating filters",
+    "behavior": "Narrow the view before reviewing or running scoped operations.",
+    "manual_section": "curation",
+    "reference_page": 42
+  },
+  {
+    "id": "F065",
+    "feature": "Source / Reusable vs Thumbnail Combination",
+    "behavior": "Choose portable source text or the captured resolved component combination.",
+    "manual_section": "reuse",
+    "reference_page": 42
+  },
+  {
+    "id": "F066",
+    "feature": "Load into active workflow",
+    "behavior": "Apply selected text and available metadata deliberately to the current Studio graph.",
+    "manual_section": "reuse",
+    "reference_page": 42
+  },
+  {
+    "id": "F067",
+    "feature": "Queue / Queue Next",
+    "behavior": "Submit an asset and restore visible state; Queue Next fronts pending work, not the running job.",
+    "manual_section": "automation",
+    "reference_page": 43
+  },
+  {
+    "id": "F068",
+    "feature": "400-item Prompt batch limit",
+    "behavior": "Process large Prompt batches in separate passes.",
+    "manual_section": "automation",
+    "reference_page": 43
+  },
+  {
+    "id": "F069",
+    "feature": "Saved Generation Recipes",
+    "behavior": "Preserve generation-state assets behind reuse, metadata import and portable packs.",
+    "manual_section": "reuse",
+    "reference_page": 43
+  },
+  {
+    "id": "F070",
+    "feature": "Thumbnail / View / no-thumbnail entry",
+    "behavior": "Open review without loading the record into the active workflow.",
+    "manual_section": "inspector",
+    "reference_page": 43
+  },
+  {
+    "id": "F071",
+    "feature": "Fixed large frame / independent panes",
+    "behavior": "Review within a viewport-bounded frame with independently scrolling metadata.",
+    "manual_section": "inspector",
+    "reference_page": 43
+  },
+  {
+    "id": "F072",
+    "feature": "Scope snapshot / Left / Right",
+    "behavior": "Browse the active filtered set without rating changes reordering the session.",
+    "manual_section": "inspector",
+    "reference_page": 43
+  },
+  {
+    "id": "F073",
+    "feature": "Fit / 50%-400% of fit / image toggle",
+    "behavior": "Zoom relative to Fit; image click switches Fit and 200% of fit.",
+    "manual_section": "inspector",
+    "reference_page": 43
+  },
+  {
+    "id": "F074",
+    "feature": "Stars / keys 1-5 / 0",
+    "behavior": "Rate persistently; 0 clears, and clicking the current star rating clears too.",
+    "manual_section": "inspector",
+    "reference_page": 43
+  },
+  {
+    "id": "F075",
+    "feature": "Delete Asset / Delete key",
+    "behavior": "Confirm type-specific record deletion and continue to the next surviving item.",
+    "manual_section": "inspector",
+    "reference_page": 43
+  },
+  {
+    "id": "F076",
+    "feature": "Metadata platter / Copy All",
+    "behavior": "Copy only available fields; a trusted captured seed of zero remains valid.",
+    "manual_section": "inspector",
+    "reference_page": 43
+  },
+  {
+    "id": "F077",
+    "feature": "Prompt / Template actions",
+    "behavior": "Load, Queue, Queue Next, Edit, Collections, Generate Preview and Delete Thumbnail.",
+    "manual_section": "inspector",
+    "reference_page": 43
+  },
+  {
+    "id": "F078",
+    "feature": "Look / Scene actions",
+    "behavior": "Load a component, Move Home, manage Collections, preview, or inspect an available source Recipe.",
+    "manual_section": "inspector",
+    "reference_page": 44
+  },
+  {
+    "id": "F079",
+    "feature": "Wardrobe actions",
+    "behavior": "Add to Builder, Load A/B/C, Edit, Collections or Generate Preview; thumbnail deletion is a bulk workflow.",
+    "manual_section": "inspector",
+    "reference_page": 44
+  },
+  {
+    "id": "F080",
+    "feature": "Unified scopes across five asset kinds",
+    "behavior": "Choose selected items, filtered results, Homes, Collections, sections or the whole Creative Library.",
+    "manual_section": "previews",
+    "reference_page": 44
+  },
+  {
+    "id": "F081",
+    "feature": "Sequential capture / queue-safe start",
+    "behavior": "Wait for existing queue work, then generate and capture each planned asset in sequence.",
+    "manual_section": "previews",
+    "reference_page": 44
+  },
+  {
+    "id": "F082",
+    "feature": "Default 800 x 1000 / presets / custom",
+    "behavior": "Use Fast, larger presets or custom dimensions; Scene runs use landscape orientation.",
+    "manual_section": "previews",
+    "reference_page": 44
+  },
+  {
+    "id": "F083",
+    "feature": "2048 px / 512 KiB / WebP / atomic",
+    "behavior": "Preserve aspect and EXIF orientation, avoid upscaling and retain the old preview if replacement fails.",
+    "manual_section": "previews",
+    "reference_page": 44
+  },
+  {
+    "id": "F084",
+    "feature": "Live / Frozen / history / run progress",
+    "behavior": "Follow completed previews or browse past frames while generation continues.",
+    "manual_section": "theater",
+    "reference_page": 44
+  },
+  {
+    "id": "F085",
+    "feature": "Fit / Fill / Actual",
+    "behavior": "Choose how the review image fills the Theater surface.",
+    "manual_section": "theater",
+    "reference_page": 44
+  },
+  {
+    "id": "F086",
+    "feature": "1-5 stars / Reject / keyboard",
+    "behavior": "Use 1-5 for stars, X for Reject, Space for Live/Frozen and arrows for history.",
+    "manual_section": "theater",
+    "reference_page": 44
+  },
+  {
+    "id": "F087",
+    "feature": "Close / reopen without stopping run",
+    "behavior": "Review can close independently of the underlying preview run.",
+    "manual_section": "theater",
+    "reference_page": 44
+  },
+  {
+    "id": "F088",
+    "feature": "Select Multiple / bulk curation",
+    "behavior": "Use applicable bulk Collection, Home, Builder, thumbnail and deletion actions.",
+    "manual_section": "curation",
+    "reference_page": 44
+  },
+  {
+    "id": "F089",
+    "feature": "Library Menu / Purge / Clean Orphan Thumbnails",
+    "behavior": "Inspect destructive scopes and remove only previews not referenced by live records.",
+    "manual_section": "maintenance",
+    "reference_page": 45
+  },
+  {
+    "id": "F090",
+    "feature": "One .soslibrary format / presets",
+    "behavior": "Use Starter / Share Pack, Wardrobe & Looks, Current Scope, Full Backup or Custom.",
+    "manual_section": "packs",
+    "reference_page": 45
+  },
+  {
+    "id": "F091",
+    "feature": "Selective import preview / merge",
+    "behavior": "Review and select content; merge without deleting unrelated local assets.",
+    "manual_section": "packs",
+    "reference_page": 45
+  },
+  {
+    "id": "F092",
+    "feature": "Pack reimport reconciliation",
+    "behavior": "Reconcile pack-supplied organization while preserving user-owned review and organization state.",
+    "manual_section": "packs",
+    "reference_page": 45
+  },
+  {
+    "id": "F093",
+    "feature": "Content-free distribution",
+    "behavior": "v4 ships without starter logs, sample workflows, bundled Library Packs or old manuals. Import a separately supplied Library Pack deliberately.",
+    "manual_section": "install",
+    "reference_page": 45
+  },
+  {
+    "id": "F094",
+    "feature": "Wardrobe vs Looks",
+    "behavior": "Keep reusable pieces and complete outfit values distinct within Outfits.",
+    "manual_section": "outfits",
+    "reference_page": 45
+  },
+  {
+    "id": "F095",
+    "feature": "Outfit Builder assembly",
+    "behavior": "Combine and reorder pieces, copy the result, load an Outfit slot or save a Look.",
+    "manual_section": "outfits",
+    "reference_page": 45
+  },
+  {
+    "id": "F096",
+    "feature": "Color / Pattern / Cut-Fit / Material / Wear / Graphic-Text",
+    "behavior": "Tune per-piece attributes inline rather than duplicating color variants in Wardrobe.",
+    "manual_section": "outfits",
+    "reference_page": 45
+  },
+  {
+    "id": "F097",
+    "feature": "Direct Wardrobe Load A/B/C",
+    "behavior": "Load a piece as a Manual Outfit value; loading a Look returns the slot to log behavior.",
+    "manual_section": "outfits",
+    "reference_page": 45
+  },
+  {
+    "id": "F098",
+    "feature": "Local deterministic beta generation",
+    "behavior": "Generate complete Outfit Look logs from recognized themes without an external language model.",
+    "manual_section": "forge",
+    "reference_page": 45
+  },
+  {
+    "id": "F099",
+    "feature": "Theme / count / seed / three sliders",
+    "behavior": "Set coverage, complexity and wearability, then inspect how the brief was interpreted.",
+    "manual_section": "forge",
+    "reference_page": 46
+  },
+  {
+    "id": "F100",
+    "feature": "Optional refinements / required / avoided",
+    "behavior": "Refine generation through editable vocabulary and phrase constraints.",
+    "manual_section": "forge",
+    "reference_page": 46
+  },
+  {
+    "id": "F101",
+    "feature": "Edit / duplicate / remove / reforge / search / autosave",
+    "behavior": "Curate a browser-saved draft without regenerating every line.",
+    "manual_section": "forge",
+    "reference_page": 46
+  },
+  {
+    "id": "F102",
+    "feature": "Audit / Constraint Fidelity / Brief Coverage",
+    "behavior": "Distinguish structural diversity, enforced constraints and unrepresented brief terms.",
+    "manual_section": "forge",
+    "reference_page": 46
+  },
+  {
+    "id": "F103",
+    "feature": "Copy / TXT / Export to Outfit Looks",
+    "behavior": "Publish complete Looks into a chosen category/subcategory or keep an editable log.",
+    "manual_section": "forge",
+    "reference_page": 46
+  },
+  {
+    "id": "F104",
+    "feature": "Nested folders / scoped scans",
+    "behavior": "Scan configured physical roots or one subtree; Collection scopes cannot scan files.",
+    "manual_section": "lora",
+    "reference_page": 46
+  },
+  {
+    "id": "F105",
+    "feature": "Collections / multi-select membership",
+    "behavior": "Group LoRAs across folders and feed the group into Loader or Yearbook.",
+    "manual_section": "lora",
+    "reference_page": 46
+  },
+  {
+    "id": "F106",
+    "feature": "Card Queue / Queue Current View",
+    "behavior": "Queue LoRAs with current workflow settings in visible order or shuffled.",
+    "manual_section": "lora",
+    "reference_page": 46
+  },
+  {
+    "id": "F107",
+    "feature": "Reviews / filters / usage history",
+    "behavior": "Review model quality, usage and provenance independently of Creative Library stars.",
+    "manual_section": "lora",
+    "reference_page": 46
+  },
+  {
+    "id": "F108",
+    "feature": "Thumbnail sources / Civitai fill / detail",
+    "behavior": "Inspect model information and populate missing visual references.",
+    "manual_section": "lora",
+    "reference_page": 46
+  },
+  {
+    "id": "F109",
+    "feature": "Comparison prompt / strength / dimensions / seed",
+    "behavior": "Run consistent LoRA tests with temporary comparison settings.",
+    "manual_section": "yearbook",
+    "reference_page": 46
+  },
+  {
+    "id": "F110",
+    "feature": "Epoch/checkpoint numeric progression",
+    "behavior": "Test detected training families from low to high; ordered and shuffled alternatives remain.",
+    "manual_section": "yearbook",
+    "reference_page": 47
+  },
+  {
+    "id": "F111",
+    "feature": "Fill missing / standardize / replacement policies",
+    "behavior": "Choose which thumbnail sources may be replaced before starting.",
+    "manual_section": "yearbook",
+    "reference_page": 47
+  },
+  {
+    "id": "F112",
+    "feature": "Live/Frozen / history / Fit-Fill-Actual / progress",
+    "behavior": "Browse the active Yearbook run while generation continues.",
+    "manual_section": "theater",
+    "reference_page": 47
+  },
+  {
+    "id": "F113",
+    "feature": "Favorite / Like / Retest / Reject / keys",
+    "behavior": "F or 1 Favorite; L or 2 Like/Keep; R or 3 Retest; X Reject; Space toggles Live.",
+    "manual_section": "theater",
+    "reference_page": 47
+  },
+  {
+    "id": "F114",
+    "feature": "Dedicated output roots / restored state",
+    "behavior": "Route runs under Sick Ollie Yearbooks/LoRA Library or Creative Library and restore original settings afterward.",
+    "manual_section": "automation",
+    "reference_page": 47
+  },
+  {
+    "id": "F115",
+    "feature": "Scan / plan / Apply Selected / Undo Last",
+    "behavior": "Preview filesystem changes before applying; undo uses operation manifests.",
+    "manual_section": "organizer",
+    "reference_page": 47
+  },
+  {
+    "id": "F116",
+    "feature": "Exact duplicates / Orphans / native Trash",
+    "behavior": "Review cleanup candidates before recoverable OS Trash operations.",
+    "manual_section": "organizer",
+    "reference_page": 47
+  },
+  {
+    "id": "F117",
+    "feature": "Source-root safety / sidecars / no-clobber moves",
+    "behavior": "Keep moves inside the chosen root and preserve model-sidecar relationships.",
+    "manual_section": "organizer",
+    "reference_page": 47
+  },
+  {
+    "id": "F118",
+    "feature": "Focused tool navigation",
+    "behavior": "Open Creative Library, LoRA Library, Outfit Forge or LoRA Organizer from the Studio hub.",
+    "manual_section": "libraries",
+    "reference_page": 48
+  },
+  {
+    "id": "F119",
+    "feature": "Classic IDs and legacy Preview migration",
+    "behavior": "Keep Classic workflows and migrate retired preview nodes without changing user data.",
+    "manual_section": "compatibility",
+    "reference_page": 48
+  },
+  {
+    "id": "F120",
+    "feature": "Legacy Log Organizer remains registered",
+    "behavior": "Older workflow nodes remain usable; the tool is not a primary Hub destination.",
+    "manual_section": "compatibility",
+    "reference_page": 48
+  },
+  {
+    "id": "F121",
+    "feature": "Canonical log / preview path migration",
+    "behavior": "Read compatible old references and move managed previews into a shared canonical store.",
+    "manual_section": "storage",
+    "reference_page": 48
+  },
+  {
+    "id": "F122",
+    "feature": "Input focus / modal stacking / press feedback",
+    "behavior": "Recover Studio-owned typing focus and provide consistent button feedback on supported devices.",
+    "manual_section": "troubleshooting",
+    "reference_page": 48
+  }
+]

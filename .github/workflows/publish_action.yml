@@ -12,11 +12,9 @@ jobs:
   publish-node:
     name: Publish Custom Node to Registry
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out code
         uses: actions/checkout@v7
-
       - name: Publish Custom Node
         uses: Comfy-Org/publish-node-action@main
         with:

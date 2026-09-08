@@ -1,7 +1,7 @@
 [project]
 name = "sick-ollie-node-pack"
-version = "3.0.0"
-description = "A ComfyUI production pack with Classic compatibility, Studio workflow cores, visual LoRA and recipe libraries, and integrated LoRA/log organizers."
+version = "4.0.0"
+description = "A ComfyUI production pack with Studio workflow cores, Outfit Forge, a portable Templates/Prompts/Outfits/Scenes Creative Library, a visual LoRA Library, and safe LoRA organization."
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = []
@@ -17,4 +17,4 @@ Documentation = "https://github.com/sickollie/SickOllie/tree/main/docs"
 
 [tool.comfy]
 PublisherId = "sickollie"
-DisplayName = "Sick Ollie Node Pack"
+DisplayName = "SICK OLLIE Creator Studio + Toolkit"

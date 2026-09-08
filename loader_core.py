@@ -18,7 +18,8 @@ from .civitai_trigger import (
     detect_civitai_triggers,
     normalize_trigger_text as _normalize_civitai_trigger_text,
 )
-from .trigger_resolution import choose_automatic, classify_candidate
+from .trigger_resolution import choose_automatic, classify_candidate, epoch_family_signature
+from .solo_catalog import SoloCatalog
 
 try:
     from aiohttp import web
@@ -67,6 +68,44 @@ LEGACY_DEFAULT_CLEANUP_RULES = r"""(?i)_\d+$
 (?i)_sickollie$
 (?i)_krea2$
 (?i)_epoch$"""
+
+_TRIGGER_CATALOG: SoloCatalog | None = None
+
+def _trigger_catalog() -> SoloCatalog:
+    global _TRIGGER_CATALOG
+    if _TRIGGER_CATALOG is None:
+        _TRIGGER_CATALOG = SoloCatalog()
+    return _TRIGGER_CATALOG
+
+def _saved_trigger_override(lora_name: str) -> tuple[str, str]:
+    selected = str(lora_name or NO_LORA)
+    if not selected or selected == NO_LORA:
+        return "", ""
+    catalog = _trigger_catalog()
+    try:
+        full_path = folder_paths.get_full_path_or_raise("loras", selected)
+        asset_id = catalog.asset_id_for_path(full_path)
+        pinned = catalog.pinned_trigger(asset_id) if asset_id else None
+    except Exception:
+        pinned = None
+    if pinned:
+        value = _normalize_civitai_trigger_text(pinned.get("raw_text"))
+        if value:
+            return value, str(pinned.get("source") or "user.override")
+
+    signature = epoch_family_signature(selected)
+    if not signature:
+        return "", ""
+    try:
+        family = catalog.trigger_family_override(
+            signature["folder_key"], signature["family_key"]
+        )
+    except Exception:
+        family = None
+    if not family:
+        return "", ""
+    value = _normalize_civitai_trigger_text(family.get("raw_text"))
+    return (value, str(family.get("source") or "user.family_override")) if value else ("", "")
 
 
 def _normalize_path(value: str) -> str:
@@ -612,7 +651,7 @@ def _trigger_from_modelspec_title(metadata: dict[str, Any]) -> tuple[str, str]:
     return "", ""
 
 
-def _detect_main_trigger(lora_name: str) -> tuple[str, str]:
+def _detect_automatic_trigger(lora_name: str) -> tuple[str, str]:
     selected = str(lora_name or NO_LORA)
     if not selected or selected == NO_LORA:
         return "", ""
@@ -644,6 +683,13 @@ def _detect_main_trigger(lora_name: str) -> tuple[str, str]:
     return "", ""
 
 
+def _detect_main_trigger(lora_name: str) -> tuple[str, str]:
+    override, source = _saved_trigger_override(lora_name)
+    if override:
+        return override, source or "user.override"
+    return _detect_automatic_trigger(lora_name)
+
+
 def _trigger_candidates(lora_name: str) -> list[dict[str, Any]]:
     selected = str(lora_name or NO_LORA)
     if not selected or selected == NO_LORA:
@@ -654,6 +700,7 @@ def _trigger_candidates(lora_name: str) -> list[dict[str, Any]]:
         return []
     metadata = _load_safetensors_metadata(full_path)
     candidates: list[dict[str, Any]] = []
+    # A saved override is the active Loader value, not detected evidence.
     for resolver in (_trigger_from_explicit_metadata, _trigger_from_ss_tag_frequency):
         trigger, source = resolver(metadata)
         if trigger:
@@ -684,10 +731,15 @@ if PromptServer is not None and web is not None:
 
     @PromptServer.instance.routes.get("/sickollie/loader-core/trigger-candidates")
     async def so_loader_core_trigger_candidates(request):
-        candidates = await asyncio.to_thread(
-            _trigger_candidates, request.rel_url.query.get("lora", "")
-        )
-        return web.json_response({"ok": True, "candidates": candidates, "automatic": choose_automatic(candidates) or {}})
+        lora_name = request.rel_url.query.get("lora", "")
+        candidates = await asyncio.to_thread(_trigger_candidates, lora_name)
+        active, active_source = await asyncio.to_thread(_detect_main_trigger, lora_name)
+        selected = ({
+            "raw": active, "clean": active, "suggested": active,
+            "source": active_source, "auto_select": True,
+            "pinned": str(active_source).startswith("user."),
+        } if active else {})
+        return web.json_response({"ok": True, "candidates": candidates, "active": selected, "automatic": selected})
 
 
 def _extra_dict(extra_pnginfo: Any) -> dict | None:

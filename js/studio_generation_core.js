@@ -1,4 +1,5 @@
 import { app } from "../../../scripts/app.js";
+import { api } from "../../../scripts/api.js";
 import {
     STUDIO_LAYOUT,
     STUDIO_THEME,
@@ -140,6 +141,51 @@ async function copyText(value) {
         return true;
     } catch (error) {
         return false;
+    }
+}
+
+function liveLoraBasename(value) {
+    const clean = String(value || "").replace(/\\/g, "/");
+    const leaf = clean.split("/").pop() || clean;
+    return leaf.replace(/\.(safetensors|ckpt|pt)$/i, "");
+}
+
+function activeGenerationLoras(node) {
+    return Array.isArray(node?.__soActiveGenerationLoras)
+        ? node.__soActiveGenerationLoras.filter((item) => item && item.file)
+        : [];
+}
+
+function clearGenerationLiveState() {
+    for (const node of app.graph?._nodes || []) {
+        if (node?.type !== TARGET && node?.comfyClass !== TARGET) continue;
+        node.__soActiveGenerationLoras = [];
+        node.__soActiveGenerationModel = "";
+        node.__soActiveGenerationUpdatedAt = 0;
+        node.setDirtyCanvas?.(true, true);
+    }
+}
+
+function generationDirectLoaderId(node) {
+    const modelInput = node?.inputs?.find((input) => String(input?.name || "") === "model");
+    const linkId = modelInput?.link;
+    if (linkId == null) return null;
+    const link = app.graph?.links?.[linkId] || app.graph?.links?.get?.(linkId);
+    return link?.origin_id ?? link?.originId ?? null;
+}
+
+function receiveGenerationLiveState(event) {
+    const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+    const loras = Array.isArray(detail.loras) ? detail.loras.map((item) => ({ ...item })) : [];
+    const generationNodes = (app.graph?._nodes || []).filter((node) => node?.type === TARGET || node?.comfyClass === TARGET);
+    const loaderId = detail.loaderNodeId ?? detail.loader_node ?? null;
+    const direct = loaderId == null ? [] : generationNodes.filter((node) => String(generationDirectLoaderId(node)) === String(loaderId));
+    const targets = direct.length ? direct : generationNodes;
+    for (const node of targets) {
+        node.__soActiveGenerationLoras = loras;
+        node.__soActiveGenerationModel = String(detail.diffusion_model || "");
+        node.__soActiveGenerationUpdatedAt = Date.now();
+        node.setDirtyCanvas?.(true, true);
     }
 }
 
@@ -368,6 +414,7 @@ function round8(value) {
 const GENERATION_VISIBLE_INPUTS = [
     "model",
     "positive_text",
+    "seed_input",
     "positive_conditioning",
     "negative_conditioning",
 ];
@@ -565,6 +612,15 @@ function drawDashboard(node, ctx) {
     // Sampling
     gradientFrame(ctx, x - 4, y - 5, w + 8, 114, 9, .43, CMYKG.green);
     section(ctx, "Sampling", x + 2, y + 7, CMYKG.green);
+    const liveRows = activeGenerationLoras(node);
+    if (liveRows.length) {
+        const main = liveRows.find((item) => String(item.role || "") === "main") || liveRows[0];
+        const extra = Math.max(0, liveRows.length - 1);
+        const liveLabel = `LIVE · ${liveLoraBasename(main.file)}${extra ? ` +${extra}` : ""}`;
+        text(ctx, fitText(ctx, liveLabel, Math.max(180, w * .46), "700 10px Segoe UI, Arial"), x + w - 2, y + 7, {
+            align: "right", color: CMYKG.green, font: "700 10px Segoe UI, Arial",
+        });
+    }
     y += 17;
     valueRow(ctx, x, y, half, ROW_H, "Sampler", widget(node, "sampler_name")?.value ?? "euler");
     valueRow(ctx, x + half + GAP, y, half, ROW_H, "Scheduler", widget(node, "scheduler")?.value ?? "beta");
@@ -643,6 +699,38 @@ function drawDashboard(node, ctx) {
     ctx.restore();
 }
 
+function drawLiveLoraShelf(node, ctx) {
+    const rows = activeGenerationLoras(node);
+    if (!rows.length || node.flags?.collapsed) return;
+    const baseBottom = dashboardTop(node) + dashboardHeight(node) + 4;
+    const availableH = Number(node.size?.[1] || 0) - baseBottom - PAD;
+    if (availableH < 72) return;
+
+    const maxW = Math.min(430, Math.max(285, Number(node.size?.[0] || MIN_WIDTH) * .38));
+    const x = PAD;
+    const y = baseBottom;
+    const w = maxW;
+    const h = Math.min(availableH, 58 + Math.min(rows.length, 6) * 30);
+    drawStudioSectionFrame(ctx, x, y, w, h, CMYKG.green, 9, .54);
+    text(ctx, "LORAS CURRENTLY IN USE", x + 12, y + 17, { color: CMYKG.green, font: "700 10px Segoe UI, Arial" });
+    const model = liveLoraBasename(node.__soActiveGenerationModel || "");
+    if (model) text(ctx, fitText(ctx, model, w - 24, "9px Segoe UI, Arial"), x + 12, y + 34, { color: CMYKG.muted, font: "9px Segoe UI, Arial" });
+
+    let rowY = y + 49;
+    for (const item of rows.slice(0, 6)) {
+        const role = String(item.role || "secondary").toUpperCase();
+        const strength = Number(item.strength);
+        const value = `${liveLoraBasename(item.file)}${Number.isFinite(strength) ? ` @ ${Number(strength).toFixed(3).replace(/\.?0+$/, "")}` : ""}`;
+        roundRect(ctx, x + 8, rowY, w - 16, 24, 6, CMYKG.row, "rgba(110,231,162,.22)");
+        text(ctx, role === "MAIN" ? "MAIN" : "SEC", x + 17, rowY + 12, { color: role === "MAIN" ? CMYKG.green : CMYKG.cyan, font: "700 9px Segoe UI, Arial" });
+        text(ctx, fitText(ctx, value, w - 82, "10px Segoe UI, Arial"), x + w - 14, rowY + 12, { align: "right", color: CMYKG.text, font: "10px Segoe UI, Arial" });
+        rowY += 30;
+    }
+    if (rows.length > 6) {
+        text(ctx, `+${rows.length - 6} more`, x + w - 14, y + h - 11, { align: "right", color: CMYKG.muted, font: "9px Segoe UI, Arial" });
+    }
+}
+
 function installDashboard(node) {
     node.properties = node.properties || {};
     node.properties.so_generation_core_schema_version = SCHEMA_VERSION;
@@ -657,6 +745,17 @@ function installDashboard(node) {
 
 app.registerExtension({
     name: "SickOllie.Studio.GenerationCore",
+    setup() {
+        ensurePointerTracker();
+        if (!window.__soGenerationLiveLoraApiHooks) {
+            window.__soGenerationLiveLoraApiHooks = true;
+            api.addEventListener("sickollie_active_loras", receiveGenerationLiveState);
+            api.addEventListener("execution_start", clearGenerationLiveState);
+            api.addEventListener("execution_error", clearGenerationLiveState);
+            api.addEventListener("execution_interrupted", clearGenerationLiveState);
+            api.addEventListener("execution_success", clearGenerationLiveState);
+        }
+    },
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== TARGET) return;
 
@@ -792,6 +891,7 @@ app.registerExtension({
             drawStudioChrome(this, ctx, "generation");
             try { originalForeground?.apply(this, arguments); } catch (error) {}
             drawDashboard(this, ctx);
+            drawLiveLoraShelf(this, ctx);
         };
 
         nodeType.prototype.onMouseDown = function (event, pos, canvas) {

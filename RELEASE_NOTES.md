@@ -1,152 +1,162 @@
-# SICK OLLIE Creator Studio + Toolkit — Release Notes
+# SICK OLLIE Creator Studio + Toolkit 4.0.0
 
-These notes cover the meaningful user-facing changes in **v3.0.0** since the previous public release, **v2.0.0**, which introduced the first generation of Studio Nodes.
+A major update from the supplied public v3.0.0 release. v4 connects reusable creative assets, model testing, image review and metadata reuse in one Studio workflow.
 
-## Headline changes
+## Creative Library
 
-### SICK OLLIE is now a connected studio system
+Templates, Prompts, Outfits and Scenes now form the main creative workspace. Home is where an asset lives; Collection is a reusable group that does not move it. Saved Generation Recipes remain behind generation-state reuse.
 
-The Studio graph, visual catalogs, review state, organizers, and metadata now share useful context. A LoRA can move from Loader Core to a resolved prompt, generation, output metadata, Preview, Library review, and a reusable Recipe without rebuilding the setup at each step.
+## Loader Core
 
-### One SOS hub, four major interfaces
+- **Model After generate.** Cycle diffusion models independently through Fixed, Increment, Decrement, Randomize or Shuffle.
+- **LoRA Collection scope.** Use a virtual LoRA group without moving model files.
+- **LIB scope jump.** Open LoRA Library in the active physical folder or Collection.
+- **Dynamic secondary stack.** Add up to ten secondary LoRAs with independent enable, strength, copy, edit, info and remove controls.
+- **Automatic trigger discovery.** Read explicit embedded evidence, training tags and safe Civitai fallback; model titles are not activation phrases.
+- **Exact persistent trigger override.** Save a durable activation phrase for one LoRA.
+- **Matching epoch family override.** Vary only the epoch/ep numeric token in the same folder; future matching files inherit the rule.
+- **Exact > family > automatic priority.** Resolve a predictable effective trigger without overwriting more specific choices.
+- **Disabled Main trigger suppression.** An inactive or zero-strength Main LoRA supplies no live trigger.
 
-The ComfyUI sidebar now provides a single **SOS** command center for:
+## Prompt Core
 
-- **LoRA Library** — visual browsing, review, thumbnail, usage, quarantine, and Yearbook workflows
-- **Recipe Catalog** — prompt-first setup saving, metadata import, comparison, and selective apply
-- **LoRA Organizer** — preview-first naming, folder planning, duplicate review, cleanup, and undo
-- **Log Organizer** — Prompt Core log cleanup, classification, deduplication, renaming, archive, and undo
+- **Manual / Prompt Input / Prompt Log.** Keep a prompt wire attached while choosing a separate Manual draft or a log.
+- **Prompt Input socket.** Receive Final Prompt or Source Prompt from Image Metadata Core.
+- **Manual Outfit A/B/C and Scene.** Type fixed component values independently of the main prompt source.
+- **Collection-backed component logs.** Choose Wardrobe, Looks or Scene Collections as live pools with stable identities.
+- **Affix placeholder resolution and progression.** Resolve components across prefix, source and suffix, and advance used log streams.
+- **Trigger Builder and placement.** Follow Loader or choose a candidate; placement controls actual insertion.
+- **Save / clear active LoRA override.** Persist an override from Prompt Core and return to Loader resolution when cleared.
 
-The organizers also remain available as compact launcher nodes.
+## Generation Core
 
-## Studio Node expansion
+- **seed_input.** An external INT overrides the seed widget for that run; -1 randomizes.
+- **Live applied LoRA shelf.** See LoRAs actually applied, associated with the connected Loader when available.
 
-### Loader Core
+## Preview Core
 
-- Added hierarchical folder scope, nested-folder inclusion, epoch and Library-state filters.
-- Added name, usage-count, and recent-use sorting.
-- Added Favorite, Keep, Retest, and Reject review states directly beside the main LoRA.
-- Added status-colored LoRA choices: deliberate ratings take priority, tested/unrated entries appear neutral, and untested entries remain muted.
-- Added a dynamic stack of up to ten secondary LoRAs with enable, strength, clear, and information controls.
-- Added main/secondary model-information buttons and one-click trigger copy.
-- Expanded trigger discovery across explicit safetensors metadata, usable tag frequency data, adjacent sidecars, and exact-hash Civitai results.
-- Tightened automatic trigger selection: short safe candidates may be selected, while long, weighted, or recipe-like strings stay available for review instead of being silently injected. `modelspec.title` remains identity information, not a trigger.
+- **Pin + Compare.** Capture the displayed result and open it beside the live preview in one action.
+- **Clear comparison.** Remove the reference and restore the normal preview width.
+- **Save to Library.** Save the verified displayed image and available generation state for reuse.
 
-### Prompt Core
+## Image Metadata Core
 
-- Added a visual Prompt Assembly system for `NAME`, Outfit A/B/C, `SCENE`, configurable `ITEM`/`BRAND`, and `TRIGGER` values.
-- Added Smart, Placeholder Only, Append, Prepend, and Off placement behavior with visible status and warnings.
-- Added placeholder insertion buttons and safe `OUTFIT`/`OUTFIT_A` alias handling.
-- Connected NAME, ITEM, Prefix, and Suffix values now show their source and are protected from accidental editing.
-- Added Trigger Setup for connected Loader triggers, detected evidence, manual overrides, placement, and trigger-off workflows.
-- Missing saved prompt/outfit/scene logs now self-heal to `[None]`; a missing active Prompt Log falls back to Manual.
-- Component indexes advance only when the component actually participates in the resolved prompt.
-- The Resulting Persistent Prompt now lives directly in Studio Prompt Core.
+- **Image upload / clear / optional IMAGE.** Inspect a chosen file; a genuinely connected image input takes precedence.
+- **Final / Source prompt / seed outputs.** Recover prompt text, seed, settings, models, components and reports when metadata exists.
+- **Individual copy fields / full report.** Copy available seed, Outfit A/B/C, Scene and prompt data directly.
+- **Save to Library.** Save normalized displayed metadata and its loaded image into Creative Library.
+- **Queued source lifetime.** Previously queued imports survive subsequent image loading and clearing.
 
-### Generation Core
+## Creative Library
 
-- Added the width/height **swap** control.
-- Consolidated encoder, VAE, canvas, sampling, batch, and seed controls into the Studio dashboard.
-- Added clear Random each run, New fixed random, Use last queued, and copy-last-seed actions.
-- Retained optional external conditioning while supporting normal internal prompt encoding.
+- **Templates / Prompts / Outfits / Scenes.** Browse reusable formulas, resolved prompts, outfit material and locations in four primary areas.
+- **Home vs Collection.** Home is the canonical location; Collections group assets without moving them.
+- **Template classification.** Recognized unresolved portable tokens classify an asset as a Template.
+- **TXT import / mixed routing / Original Log.** Split mixed logs line by line while retaining managed source provenance and order.
+- **Search / facets / placeholder / rating filters.** Narrow the view before reviewing or running scoped operations.
+- **Source / Reusable vs Thumbnail Combination.** Choose portable source text or the captured resolved component combination.
+- **Load into active workflow.** Apply selected text and available metadata deliberately to the current Studio graph.
+- **Queue / Queue Next.** Submit an asset and restore visible state; Queue Next fronts pending work, not the running job.
+- **400-item Prompt batch limit.** Process large Prompt batches in separate passes.
+- **Saved Generation Recipes.** Preserve generation-state assets behind reuse, metadata import and portable packs.
+- **Select Multiple / bulk curation.** Use applicable bulk Collection, Home, Builder, thumbnail and deletion actions.
+- **Library Menu / Purge / Clean Orphan Thumbnails.** Inspect destructive scopes and remove only previews not referenced by live records.
 
-### Output Core
+## Library Inspector
 
-- Added Auto Context to discover recognized upstream Studio state without a large metadata wiring bundle.
-- Expanded variable-driven output folders and filenames with visible resolved values and copy feedback.
-- Added PNG/JPG/WebP saving with independent prompt, workflow, and Civitai metadata choices.
-- Added structured SICK OLLIE runtime metadata, resource hashes, resolved indexes, trigger/context, and actual-generation settings.
-- LoRA use/test history is recorded only after an output is saved successfully.
+- **Thumbnail / View / no-thumbnail entry.** Open review without loading the record into the active workflow.
+- **Fixed large frame / independent panes.** Review within a viewport-bounded frame with independently scrolling metadata.
+- **Scope snapshot / Left / Right.** Browse the active filtered set without rating changes reordering the session.
+- **Fit / 50%-400% of fit / image toggle.** Zoom relative to Fit; image click switches Fit and 200% of fit.
+- **Stars / keys 1-5 / 0.** Rate persistently; 0 clears, and clicking the current star rating clears too.
+- **Delete Asset / Delete key.** Confirm type-specific record deletion and continue to the next surviving item.
+- **Metadata platter / Copy All.** Copy only available fields; a trusted captured seed of zero remains valid.
+- **Prompt / Template actions.** Load, Queue, Queue Next, Edit, Collections, Generate Preview and Delete Thumbnail.
+- **Look / Scene actions.** Load a component, Move Home, manage Collections, preview, or inspect an available source Recipe.
+- **Wardrobe actions.** Add to Builder, Load A/B/C, Edit, Collections or Generate Preview; thumbnail deletion is a bulk workflow.
 
-### Preview Core and Image Metadata Core
+## Generate Previews
 
-- Rebuilt Preview as a compact visual toolbar with contain/cover/width/height/stretch/actual-size modes, solid/checker/blurred backgrounds, and editable color.
-- Added persistent previews, Pin, side-by-side Compare, Clear, Library Thumb, and Recipe quick-save.
-- Recipe quick-save and Library thumbnail assignment use the image actually displayed in Preview.
-- Expanded image inspection for structured SICK OLLIE metadata with fallbacks for ComfyUI and A1111/Civitai metadata.
+- **Unified scopes across five asset kinds.** Choose selected items, filtered results, Homes, Collections, sections or the whole Creative Library.
+- **Sequential capture / queue-safe start.** Wait for existing queue work, then generate and capture each planned asset in sequence.
+- **Default 800 x 1000 / presets / custom.** Use Fast, larger presets or custom dimensions; Scene runs use landscape orientation.
+- **2048 px / 512 KiB / WebP / atomic.** Preserve aspect and EXIF orientation, avoid upscaling and retain the old preview if replacement fails.
 
-## LoRA Library and Yearbook
+## Creative Theater
 
-- Added a responsive 3:4 thumbnail gallery and detailed LoRA view backed by a shared catalog.
-- Added local compact WebP thumbnails sourced from generated results, custom uploads, adjacent previews, Civitai showcases, or Yearbook.
-- Added folder, epoch, rating/test, source, name, and usage filters.
-- Separated tested/use history from intentional rating state.
-- Added recent output history, detected triggers, creator/base/model details, and one-click Loader integration that preserves strength.
-- Added Auto first image for blank thumbnails.
-- Added filtered-scope Yearbook generation with source-aware targets: missing, Civitai, generated non-Yearbook, non-Yearbook standardization, existing Yearbook rebuild, or all.
-- Yearbook now restores temporary Loader/Prompt state and stops active or delayed queues when stopped or closed.
-- Added recoverable quarantine for a LoRA and recognized adjacent sidecars.
-- Added scoped thumbnail clearing and catalog purge/rebuild tools that do not delete LoRAs, sidecars, recipes, or saved settings.
-- Excluded Civitai videos from image candidates and added recovery for stale/missing thumbnail caches.
+- **Live / Frozen / history / run progress.** Follow completed previews or browse past frames while generation continues.
+- **Fit / Fill / Actual.** Choose how the review image fills the Theater surface.
+- **1-5 stars / Reject / keyboard.** Use 1-5 for stars, X for Reject, Space for Live/Frozen and arrows for history.
+- **Close / reopen without stopping run.** Review can close independently of the underlying preview run.
 
-## Recipe Catalog
+## Library Packs
 
-- Added prompt-first recipe saving from current Studio state or directly from Preview.
-- Added import of metadata-bearing PNG, JPG, and WebP files.
-- Added recovery from structured Studio metadata, Preview runtime state, expanded ComfyUI API graphs, common Classic/legacy workflows, and A1111/Civitai parameters.
-- Prompt Log recipes retain the exact source line that ran as a reusable Manual template, including placeholders.
-- Default recipes focus on prompt assembly, active substitutions/additions, dimensions, and the actual seed.
-- Model, LoRA, encoder, and VAE values are optional and begin unchecked for portability.
-- Added Review & Apply with readable current/incoming values, per-value choices, and connected-field protection. Applying a recipe never replaces the canvas.
-- Preview metadata is authoritative, preventing auto-advanced indexes from saving the values prepared for the next queue.
+- **One .soslibrary format / presets.** Use Starter / Share Pack, Wardrobe & Looks, Current Scope, Full Backup or Custom.
+- **Selective import preview / merge.** Review and select content; merge without deleting unrelated local assets.
+- **Pack reimport reconciliation.** Reconcile pack-supplied organization while preserving user-owned review and organization state.
 
-## Organizers
+## Distribution
 
-### LoRA Organizer
+- **Content-free distribution.** v4 ships without starter logs, sample workflows, bundled Library Packs or old manuals. Import a separately supplied Library Pack deliberately.
 
-- Added preview-first scans using safetensors metadata, fresh SHA-256 hashes, and optional Civitai lookup.
-- Added editable Base → Category → Creator planning, smart rename behavior, `Other` handling for one-offs, and `Uncharted` for unidentified files.
-- Added no-overwrite apply, recognized-sidecar moves, progressive manifests, and undo.
-- Added exact-duplicate review with keeper protection and fresh revalidation.
-- Added orphan-sidecar and empty-folder cleanup previews.
-- Confirmed cleanup uses the operating system’s recoverable Trash/Recycle Bin and never falls back to permanent deletion.
+## Outfits
 
-### Log Organizer
+- **Wardrobe vs Looks.** Keep reusable pieces and complete outfit values distinct within Outfits.
+- **Outfit Builder assembly.** Combine and reorder pieces, copy the result, load an Outfit slot or save a Look.
+- **Color / Pattern / Cut-Fit / Material / Wear / Graphic-Text.** Tune per-piece attributes inline rather than duplicating color variants in Wardrobe.
+- **Direct Wardrobe Load A/B/C.** Load a piece as a Manual Outfit value; loading a Look returns the slot to log behavior.
 
-- Added cleanup for blanks, structural headings, numbering, and exact duplicate resolved lines.
-- Added standalone `SICK DOLLS` → `BRAND` conversion.
-- Added compact Prompt Core-compatible classification for outfits, prompts, scenes, values, templates, masters, fragments, and Needs Review.
-- Added readable filename polish with token contracts and resolved counts.
-- Added editable preview, timestamped original archive, safe apply, Undo Last, CSV audit export, and empty-folder cleanup.
-- Removed the special `girl` / `girls` filter and destination. Those words now use normal prompt classification.
+## Outfit Forge
 
-## Reliability and quality-of-life highlights
+- **Local deterministic beta generation.** Generate complete Outfit Look logs from recognized themes without an external language model.
+- **Theme / count / seed / three sliders.** Set coverage, complexity and wearability, then inspect how the brief was interpreted.
+- **Optional refinements / required / avoided.** Refine generation through editable vocabulary and phrase constraints.
+- **Edit / duplicate / remove / reforge / search / autosave.** Curate a browser-saved draft without regenerating every line.
+- **Audit / Constraint Fidelity / Brief Coverage.** Distinguish structural diversity, enforced constraints and unrepresented brief terms.
+- **Copy / TXT / Export to Outfit Looks.** Publish complete Looks into a chosen category/subcategory or keep an editable log.
 
-- Missing-log recovery instead of queue-blocking stale selections.
-- Trigger placement activates correctly when a candidate is chosen.
-- Preview compare uses a true side-by-side reference pane.
-- Custom recipe naming no longer depends on unsupported browser `prompt()`.
-- Recipe values and thumbnail now come from the same displayed result.
-- Safer cancellation and state restoration during Yearbook runs.
-- Clearer copy feedback, information buttons, state colors, and dashboard warnings.
-- Lower-cost Library rendering by removing full-screen backdrop blur.
-- Corrected starter workflows and current installation/documentation paths.
+## LoRA Library
 
-## Registration and compatibility changes
+- **Nested folders / scoped scans.** Scan configured physical roots or one subtree; Collection scopes cannot scan files.
+- **Collections / multi-select membership.** Group LoRAs across folders and feed the group into Loader or Yearbook.
+- **Card Queue / Queue Current View.** Queue LoRAs with current workflow settings in visible order or shuffled.
 
-The current release registers:
+## LoRA Yearbook
 
-- **Classic:** Loader, Prompt, Generation, Output, Persist
-- **Studio:** Loader, Prompt, Generation, Output, Preview, Image Metadata
-- **Utilities:** LoRA Organizer and Log Organizer launchers
+- **Comparison prompt / strength / dimensions / seed.** Run consistent LoRA tests with temporary comparison settings.
+- **Epoch/checkpoint numeric progression.** Test detected training families from low to high; ordered and shuffled alternatives remain.
 
-Classic Preview, Classic Image Metadata, and Studio Persist are no longer registered. In v3, workflows containing the old Classic `SOFitPreview` type automatically upgrade it in place to `SOFitPreviewStudio` before missing-node detection. Node IDs, connections, positions, widget values, properties, and stored previews are preserved; save the opened workflow once to persist the new type.
+## LoRA Theater
 
-Older Classic Image Metadata and Studio Persist nodes may still appear missing. Use Studio Image Metadata and Studio Prompt Core’s built-in persistent resolved-prompt display as appropriate.
+- **Live/Frozen / history / Fit-Fill-Actual / progress.** Browse the active Yearbook run while generation continues.
+- **Favorite / Like / Retest / Reject / keys.** F or 1 Favorite; L or 2 Like/Keep; R or 3 Retest; X Reject; Space toggles Live.
 
-## Update guidance
+## Automated runs
 
-Replace the old extension directory with the clean release folder rather than merging over stale files. Keep `ComfyUI/user/SickOllie/` and `ComfyUI/input/SickOllieLogs/`; those locations contain catalog state, ratings, recipes, thumbnails, and prompt libraries outside the extension.
+- **Dedicated output roots / restored state.** Route runs under Sick Ollie Yearbooks/LoRA Library or Creative Library and restore original settings afterward.
 
-After updating, restart ComfyUI completely and hard-refresh the browser.
+## Studio Hub
 
-## Validation performed for v3
+- **Focused tool navigation.** Open Creative Library, LoRA Library, Outfit Forge or LoRA Organizer from the Studio hub.
 
-- Python unit suite: 39 tests passed
-- Studio frontend behavior suite: passed
-- Python byte-compilation: passed
-- JavaScript syntax checks: passed
-- Clean package contents: verified by the release-packaging audit
-- Legacy Preview workflow migration: passed for root and nested Preview nodes
+## Compatibility
 
-Manual ComfyUI smoke testing on the supported frontend and target operating systems is still recommended before publishing.
+- **Classic IDs and legacy Preview migration.** Keep Classic workflows and migrate retired preview nodes without changing user data.
+- **Legacy Log Organizer remains registered.** Older workflow nodes remain usable; the tool is not a primary Hub destination.
+- **Canonical log / preview path migration.** Read compatible old references and move managed previews into a shared canonical store.
+
+## Quality of life
+
+- **Input focus / modal stacking / press feedback.** Recover Studio-owned typing focus and provide consistent button feedback on supported devices.
+
+## Retired and consolidated
+
+The former Workshop-first and Recipe Catalog navigation gives way to the four Creative Library areas. Home and Collection replace overlapping organization terms. Creative Library automation is Generate Previews; LoRA testing retains Yearbook. Library Pack uses .soslibrary in place of the separate Wardrobe Pack workflow. Preview’s main actions are Pin + Compare, Clear and Save to Library. Prompt/Template thumbnail maintenance lives in Inspector and bulk workflows.
+
+## A clean distribution
+
+v4 includes no starter logs, sample workflows, bundled Library Pack, historical manuals or development checkpoint history. Import a separately supplied Library Pack when available, or your own TXT logs. Existing user-owned content is preserved by normal extension replacement.
+
+## Install or update
+
+Back up ComfyUI user data and input/SickOllieLogs. Close ComfyUI, replace the ComfyUI-SickOllie extension folder, restart and hard-refresh the frontend. rgthree-comfy remains required for Loader’s shared model-information services. Select compatible locally installed model files. See [README](README.md) and the [v4 User Manual](docs/SICK-OLLIE-v4-User-Manual.pdf).

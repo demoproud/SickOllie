@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { STUDIO_THEME, applyStudioNodeColors, drawStudioSectionFrame } from "./studio_theme.js";
 
 const TARGET = "SOImageMetadataCoreStudio";
 const PREVIEW_PROP = "so_metadata_preview_images";
@@ -26,6 +27,9 @@ const LEFT_MIN = 500;
 const LEFT_MAX = 610;
 const GAP = 16;
 const PAD = 14;
+const TOOL_BUTTON_H = 32;
+const TOOL_GAP = 7;
+const TOOL_HEADER_H = 25;
 
 function widget(node, name) {
     return node.widgets?.find((item) => item.name === name);
@@ -190,7 +194,7 @@ async function clearTempOnServer(token) {
     }
 }
 
-async function clearLoadedImage(node, deleteTemp = true) {
+async function clearLoadedImage(node, deleteTemp = false) {
     const previous = currentImageToken(node);
     node.__soMetadataRequest = Symbol("metadata_clear");
     setImageToken(node, "[None]");
@@ -236,11 +240,9 @@ async function uploadTempFile(node, file) {
 
     const requestToken = Symbol("metadata_upload");
     node.__soMetadataRequest = requestToken;
-    const previous = currentImageToken(node);
     const form = new FormData();
-    // Append the old temp token first so the server can safely dispose of it
-    // after the new image has been validated.
-    form.append("previous_token", previous);
+    // Keep older temp sources on disk because queued workflows may still
+    // reference them after the user moves on to inspect another image.
     form.append("file", file, file.name);
 
     try {
@@ -285,7 +287,7 @@ function makeUploadButton(node) {
 
 function makeClearButton(node) {
     if (node.__soClearButton) return node.__soClearButton;
-    const button = node.addWidget("button", "Clear loaded image", null, () => clearLoadedImage(node, true), { serialize: false });
+    const button = node.addWidget("button", "Clear loaded image", null, () => clearLoadedImage(node, false), { serialize: false });
     button.serialize = false;
     button.options = { ...(button.options || {}), serialize: false };
     node.__soClearButton = button;
@@ -322,9 +324,11 @@ function moveWidgetToIndex(node, moving, targetIndex) {
     node.widgets.splice(bounded, 0, moving);
 }
 
-function constrainTopWidget(target) {
+function hideActionWidget(target) {
     if (!target) return;
-    target.computeSize = (width) => [width || 0, 30];
+    target.computeSize = () => [0, 0];
+    target.hidden = true;
+    if (target.inputEl) target.inputEl.style.display = "none";
 }
 
 function arrangeTopWidgets(node) {
@@ -333,17 +337,45 @@ function arrangeTopWidgets(node) {
     const clear = makeClearButton(node);
     const seed = makeSeedButton(node);
 
-    // image_file remains serialized as our private source token, but is not a
-    // user-facing path/dropdown anymore.
+    // All three actions are rendered inside the custom left inspector now.
+    // Keep these backing widgets alive for compatibility, but never let the
+    // stock Comfy widgets create a second visual toolbar above our UI.
     hideBackingWidget(imageFile);
-
     moveWidgetToIndex(node, upload, 0);
     moveWidgetToIndex(node, clear, 1);
     moveWidgetToIndex(node, seed, 2);
+    hideActionWidget(upload);
+    hideActionWidget(clear);
+    hideActionWidget(seed);
+}
 
-    constrainTopWidget(upload);
-    constrainTopWidget(clear);
-    if (seed) constrainTopWidget(seed);
+function syncConnectedPromptInputs(node) {
+    const graph = app.graph;
+    if (!graph) return;
+    const values = node.__soLiveOutputs || {};
+    for (const outputName of ["final_prompt", "source_prompt"]) {
+        const outputIndex = (node.outputs || []).findIndex((slot) => String(slot?.name || slot?.label || "") === outputName);
+        if (outputIndex < 0) continue;
+        const output = node.outputs?.[outputIndex];
+        for (const linkRef of output?.links || []) {
+            const link = typeof linkRef === "object" ? linkRef : graph.links?.[linkRef];
+            const targetId = link?.target_id ?? link?.targetId;
+            const targetSlot = Number(link?.target_slot ?? link?.targetSlot);
+            const target = graph.getNodeById?.(targetId);
+            if (!target || !Number.isInteger(targetSlot)) continue;
+            const input = target.inputs?.[targetSlot];
+            const inputName = String(input?.widget?.name ?? input?.name ?? "");
+            const targetKinds = [target.type, target.comfyClass].map(value => String(value || ""));
+            if (inputName !== "manual_prompt_input" || !targetKinds.some(kind => ["SOPromptLogEngineStudio", "SOPromptLogEngine"].includes(kind))) continue;
+            const text = String(values[outputName] ?? "");
+            target.properties = target.properties || {};
+            // Prompt input is now an explicit Prompt Source. Keep its live value
+            // available to Prompt Core without clobbering the user's Manual draft
+            // or changing whichever source they deliberately selected.
+            target.properties.so_external_manual_prompt_value = text;
+            target.setDirtyCanvas?.(true, true);
+        }
+    }
 }
 
 function applyPayload(node, payloadValue) {
@@ -362,8 +394,19 @@ function applyPayload(node, payloadValue) {
     const seed = makeSeedButton(node);
     const seedText = String(payload.seed_text || "").trim();
     seed.name = seedText ? `📋 Copy seed: ${seedText}` : "";
-    seed.computeSize = (width) => [width || 0, seedText ? 30 : 0];
+    hideActionWidget(seed);
 
+    // Expose inspector strings as live frontend values so a connected Prompt
+    // Core can mirror final_prompt/source_prompt into its Manual Prompt field
+    // immediately, even when the image was loaded from the file inspector.
+    node.__soLiveOutputs = {
+        ...(node.__soLiveOutputs || {}),
+        final_prompt: String(payload.final_prompt || ""),
+        source_prompt: String(payload.source_prompt || ""),
+        seed: seedText,
+    };
+    syncConnectedPromptInputs(node);
+    ensureMetadataHeight(node);
     node.setDirtyCanvas?.(true, true);
 }
 
@@ -384,12 +427,67 @@ function clearForExecution(node) {
 }
 
 function contentTop(node) {
-    const seed = node.__soSeedButton;
-    const clear = node.__soClearButton;
-    const upload = node.__soUploadButton;
-    const ys = [seed?.last_y, clear?.last_y, upload?.last_y].filter((v) => Number.isFinite(v));
-    if (ys.length) return Math.max(...ys) + 48;
-    return 245;
+    // Inputs live on the left and outputs on the right, so their socket rows
+    // overlap vertically. Treat the bay as the larger *side* instead of
+    // stacking every socket into one imaginary column. Also avoid slot.pos:
+    // LiteGraph can retain stretched/stale positions after a tall resize,
+    // which previously pushed the inspector hundreds of pixels downward and
+    // left a huge empty ceiling above the custom UI.
+    const inputRows = Math.max(1, (node.inputs || []).length);
+    const outputRows = Math.max(1, (node.outputs || []).length);
+    const rows = Math.max(inputRows, outputRows);
+    const socketBottom = 34 + (rows - 1) * 18;
+    return Math.max(190, Math.round(socketBottom + 24));
+}
+
+function resolvedLineFromMetadataSection(text) {
+    for (const line of String(text || "").split(/\r?\n/)) {
+        if (line.startsWith("Resolved line:")) return line.slice("Resolved line:".length).trim();
+    }
+    return "";
+}
+
+function metadataQuickCopyEntries(payload = {}) {
+    const direct = payload.copy_values && typeof payload.copy_values === "object" ? payload.copy_values : {};
+    return [
+        ["outfit_a", "OUTFIT A", payload.outfit_a],
+        ["outfit_b", "OUTFIT B", payload.outfit_b],
+        ["outfit_c", "OUTFIT C", payload.outfit_c],
+        ["scene", "SCENE", payload.scene],
+    ].map(([key, label, fallback]) => ({
+        key,
+        label,
+        value: String(direct[key] || resolvedLineFromMetadataSection(fallback) || "").trim(),
+    })).filter(entry => entry.value);
+}
+
+function inspectorMinimumContentHeight(node) {
+    const payload = node.__soMetadataPayload || {};
+    const status = Boolean(String(payload.status || "").trim());
+    const finalPrompt = Boolean(String(payload.final_prompt || "").trim());
+    const sourcePrompt = Boolean(String(payload.source_prompt || "").trim());
+    const metadata = Boolean(String(payload.resolved_inputs || "").trim());
+    const quickCopies = metadataQuickCopyEntries(payload);
+    const buttonH = 30;
+    const sectionGap = 10;
+    const toolsH = TOOL_HEADER_H + TOOL_BUTTON_H * 3 + TOOL_GAP * 4 + 8;
+
+    let height = toolsH;
+    if (status) height += sectionGap + 76;
+    if (finalPrompt) height += sectionGap + 220 + 6 + buttonH;
+    if (sourcePrompt) height += sectionGap + 175 + 6 + buttonH;
+    if (metadata) height += sectionGap + 230 + 6 + buttonH + (quickCopies.length ? 6 + buttonH : 0);
+    return Math.max(260, height);
+}
+
+function minimumMetadataHeight(node) {
+    return Math.max(MIN_HEIGHT, contentTop(node) + inspectorMinimumContentHeight(node) + PAD);
+}
+
+function ensureMetadataHeight(node) {
+    if (!node?.size) return;
+    const minimum = minimumMetadataHeight(node);
+    if (Number(node.size[1] || 0) < minimum) node.size[1] = minimum;
 }
 
 function autoFitMetadataWidth(node, imageWidth, imageHeight) {
@@ -476,21 +574,8 @@ function metadataAccentForTitle(title) {
 }
 
 function drawTextBox(ctx, rect, title, text) {
-    roundedRect(ctx, rect.x, rect.y, rect.w, rect.h, 8);
-    ctx.fillStyle = "#202020";
-    ctx.fill();
     const accent = metadataAccentForTitle(title);
-    const border = ctx.createLinearGradient(rect.x, rect.y, rect.x + rect.w, rect.y + rect.h);
-    border.addColorStop(0, SO_META_CMYKG.cyan);
-    border.addColorStop(.34, SO_META_CMYKG.magenta);
-    border.addColorStop(.67, SO_META_CMYKG.yellow);
-    border.addColorStop(1, SO_META_CMYKG.green);
-    ctx.save();
-    ctx.globalAlpha = .58;
-    ctx.strokeStyle = border;
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-    ctx.restore();
+    drawStudioSectionFrame(ctx, rect.x, rect.y, rect.w, rect.h, accent, 8, .52);
 
     ctx.save();
     ctx.beginPath();
@@ -518,9 +603,130 @@ function drawTextBox(ctx, rect, title, text) {
     ctx.restore();
 }
 
-function drawCopyButton(ctx, rect, label, enabled) {
-    roundedRect(ctx, rect.x, rect.y, rect.w, rect.h, 6);
-    ctx.fillStyle = enabled ? "#252529" : "#18181b";
+function metadataPress(node, key) {
+    try { navigator.vibrate?.(16); } catch (error) {}
+    node.__soMetadataPressedKey = key;
+    node.setDirtyCanvas?.(true, true);
+    clearTimeout(node.__soMetadataPressTimer);
+    node.__soMetadataPressTimer = setTimeout(() => {
+        if (node.__soMetadataPressedKey === key) node.__soMetadataPressedKey = "";
+        node.setDirtyCanvas?.(true, true);
+    }, 115);
+}
+
+async function metadataCopy(node, key, text) {
+    metadataPress(node, key);
+    if (!(await copyText(text))) return false;
+    node.__soMetadataFlashKey = key;
+    node.setDirtyCanvas?.(true, true);
+    clearTimeout(node.__soMetadataFlashTimer);
+    node.__soMetadataFlashTimer = setTimeout(() => {
+        if (node.__soMetadataFlashKey === key) node.__soMetadataFlashKey = "";
+        node.setDirtyCanvas?.(true, true);
+    }, 800);
+    return true;
+}
+
+async function saveLoadedMetadataRecipe(node) {
+    const payload = node.__soMetadataPayload || {};
+    const metadataJson = String(payload.metadata_json || "").trim();
+    if (!metadataJson || !payload.has_metadata) return false;
+    metadataPress(node, "recipe");
+    node.__soMetadataRecipeBusy = true;
+    node.setDirtyCanvas?.(true, true);
+    try {
+        const preview = cleanImageData(node.__soMetadataPreviewData?.[0]);
+        const form = new FormData();
+        form.append("metadata_json", metadataJson);
+        if (preview) {
+            try {
+                const imageResponse = await fetch(imageDataToUrl(preview));
+                if (imageResponse.ok) {
+                    const blob = await imageResponse.blob();
+                    form.append("file", blob, preview.filename || "metadata-preview.png");
+                }
+            } catch (error) {
+                console.warn("[Sick Ollie Image Metadata Core] Could not attach Recipe thumbnail", error);
+            }
+        }
+        const response = await fetch("/sickollie/creative-library/import-metadata", {
+            method: "POST",
+            body: form,
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok || !result?.saved) {
+            throw new Error(result?.error || `HTTP ${response.status}`);
+        }
+        node.__soMetadataFlashKey = "recipe";
+        try { navigator.vibrate?.([18, 35, 18]); } catch (error) {}
+        node.setDirtyCanvas?.(true, true);
+        clearTimeout(node.__soMetadataFlashTimer);
+        node.__soMetadataFlashTimer = setTimeout(() => {
+            if (node.__soMetadataFlashKey === "recipe") node.__soMetadataFlashKey = "";
+            node.setDirtyCanvas?.(true, true);
+        }, 1050);
+        window.dispatchEvent(new CustomEvent("sickollie:library-usage-updated", { detail: { source: "metadata-core" } }));
+        return true;
+    } catch (error) {
+        console.warn("[Sick Ollie Image Metadata Core] Could not save loaded image as a Recipe", error);
+        alert(error?.message || "Could not save this image as a Recipe.");
+        return false;
+    } finally {
+        node.__soMetadataRecipeBusy = false;
+        node.setDirtyCanvas?.(true, true);
+    }
+}
+
+function drawInspectorButton(ctx, rect, label, accent, enabled = true, pressed = false) {
+    const inset = pressed ? 1.5 : 0;
+    roundedRect(ctx, rect.x + inset, rect.y + inset, rect.w - inset * 2, rect.h - inset * 2, 7);
+    ctx.fillStyle = enabled ? (pressed ? STUDIO_THEME.rowHover : STUDIO_THEME.row) : "rgba(20,18,24,.72)";
+    ctx.fill();
+    ctx.strokeStyle = enabled ? `${accent}88` : "rgba(255,255,255,.08)";
+    ctx.lineWidth = pressed ? 1.6 : 1;
+    ctx.stroke();
+    ctx.fillStyle = enabled ? "#f4f1f6" : "rgba(255,255,255,.28)";
+    ctx.font = "600 12px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + (pressed ? 1.5 : .5));
+}
+
+function drawToolPanel(node, ctx, rect, buttons) {
+    drawStudioSectionFrame(ctx, rect.x, rect.y, rect.w, rect.h, SO_META_CMYKG.cyan, 9, .52);
+    ctx.fillStyle = SO_META_CMYKG.cyan;
+    ctx.font = "700 12px Segoe UI";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText("IMAGE CONTROLS", rect.x + 10, rect.y + TOOL_HEADER_H / 2 + 2);
+    const seedText = String(node.__soMetadataPayload?.seed_text || "").trim();
+    const flash = node.__soMetadataFlashKey;
+    const pressed = node.__soMetadataPressedKey;
+    drawInspectorButton(ctx, buttons.upload, "Choose image", SO_META_CMYKG.cyan, true, pressed === "upload");
+    drawInspectorButton(ctx, buttons.clear, "Clear image", SO_META_CMYKG.magenta, true, pressed === "clear");
+    drawInspectorButton(ctx, buttons.seed, flash === "seed" ? "✓ Seed copied" : (seedText ? `Copy seed · ${seedText}` : "Seed unavailable"), SO_META_CMYKG.yellow, Boolean(seedText), pressed === "seed");
+    const recipeReady = Boolean(node.__soMetadataPayload?.has_metadata);
+    const recipeLabel = node.__soMetadataRecipeBusy ? "Saving Recipe…" : (flash === "recipe" ? "✓ Recipe saved to Creative Library" : "Save Recipe");
+    drawInspectorButton(ctx, buttons.recipe, recipeLabel, SO_META_CMYKG.green, recipeReady && !node.__soMetadataRecipeBusy, pressed === "recipe");
+}
+
+function fitMetadataButtonLabel(ctx, text, maxWidth) {
+    const value = String(text || "");
+    if (ctx.measureText(value).width <= maxWidth) return value;
+    const ellipsis = "…";
+    let low = 0, high = value.length;
+    while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        if (ctx.measureText(value.slice(0, mid) + ellipsis).width <= maxWidth) low = mid;
+        else high = mid - 1;
+    }
+    return value.slice(0, low) + ellipsis;
+}
+
+function drawCopyButton(ctx, rect, label, enabled, pressed = false) {
+    const inset = pressed ? 1.5 : 0;
+    roundedRect(ctx, rect.x + inset, rect.y + inset, rect.w - inset * 2, rect.h - inset * 2, 6);
+    ctx.fillStyle = enabled ? (pressed ? STUDIO_THEME.rowHover : STUDIO_THEME.row) : "rgba(20,18,24,.72)";
     ctx.fill();
     const accent = metadataAccentForTitle(label);
     ctx.strokeStyle = enabled ? `${accent}77` : "rgba(255,255,255,.08)";
@@ -529,12 +735,12 @@ function drawCopyButton(ctx, rect, label, enabled) {
     ctx.font = "13px Segoe UI";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + 0.5);
+    ctx.fillText(fitMetadataButtonLabel(ctx, label, Math.max(20, rect.w - 12)), rect.x + rect.w / 2, rect.y + rect.h / 2 + 0.5);
 }
 
 function drawPreviewPanel(node, ctx, rect) {
     roundedRect(ctx, rect.x, rect.y, rect.w, rect.h, 10);
-    ctx.fillStyle = "#080808";
+    ctx.fillStyle = STUDIO_THEME.body;
     ctx.fill();
     const previewGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x + rect.w, rect.y + rect.h);
     previewGradient.addColorStop(0, `${SO_META_CMYKG.cyan}88`);
@@ -575,18 +781,30 @@ function layoutInspector(node) {
     const finalPrompt = String(payload.final_prompt || "").trim();
     const sourcePrompt = String(payload.source_prompt || "").trim();
     const metadata = String(payload.resolved_inputs || "").trim();
+    const quickCopies = metadataQuickCopyEntries(payload);
 
     const buttonH = 30;
     const sectionGap = 10;
+    const toolsH = TOOL_HEADER_H + TOOL_BUTTON_H * 3 + TOOL_GAP * 4 + 8;
     const statusH = status ? 76 : 0;
     const finalH = finalPrompt ? 220 : 0;
     const sourceH = sourcePrompt ? 175 : 0;
-    const buttonCount = (finalPrompt ? 1 : 0) + (sourcePrompt ? 1 : 0) + (metadata ? 1 : 0);
-    const fixed = statusH + finalH + sourceH + buttonCount * buttonH + sectionGap * 7;
+    const buttonCount = (finalPrompt ? 1 : 0) + (sourcePrompt ? 1 : 0) + (metadata ? 1 : 0) + (quickCopies.length ? 1 : 0);
+    const fixed = toolsH + statusH + finalH + sourceH + buttonCount * buttonH + sectionGap * 8 + (quickCopies.length ? 6 : 0);
     const metaH = metadata ? Math.max(230, g.contentH - fixed) : 0;
 
     let y = g.top;
     const layout = { buttons: {}, preview: { x: g.rightX, y: g.top, w: g.rightW, h: g.contentH } };
+    layout.tools = { x: g.leftX, y, w: g.leftW, h: toolsH };
+    const toolInnerX = g.leftX + 8;
+    const toolInnerW = g.leftW - 16;
+    const half = (toolInnerW - TOOL_GAP) / 2;
+    const firstY = y + TOOL_HEADER_H + TOOL_GAP;
+    layout.buttons.upload = { x: toolInnerX, y: firstY, w: half, h: TOOL_BUTTON_H };
+    layout.buttons.clear = { x: toolInnerX + half + TOOL_GAP, y: firstY, w: half, h: TOOL_BUTTON_H };
+    layout.buttons.seed = { x: toolInnerX, y: firstY + TOOL_BUTTON_H + TOOL_GAP, w: toolInnerW, h: TOOL_BUTTON_H };
+    layout.buttons.recipe = { x: toolInnerX, y: firstY + (TOOL_BUTTON_H + TOOL_GAP) * 2, w: toolInnerW, h: TOOL_BUTTON_H };
+    y += toolsH + sectionGap;
     if (status) {
         layout.status = { x: g.leftX, y, w: g.leftW, h: statusH };
         y += statusH + sectionGap;
@@ -604,8 +822,19 @@ function layoutInspector(node) {
         y += buttonH + sectionGap;
     }
     if (metadata) {
-        layout.metadata = { x: g.leftX, y, w: g.leftW, h: Math.max(180, Math.min(metaH, g.bottom - y - buttonH - 8)) };
+        const afterMetadataH = buttonH + 8 + (quickCopies.length ? buttonH + 6 : 0);
+        layout.metadata = { x: g.leftX, y, w: g.leftW, h: Math.max(180, Math.min(metaH, g.bottom - y - afterMetadataH)) };
         y += layout.metadata.h + 6;
+        if (quickCopies.length) {
+            const copyGap = 5;
+            const copyW = (g.leftW - copyGap * (quickCopies.length - 1)) / quickCopies.length;
+            layout.quickCopies = quickCopies.map((entry, index) => {
+                const rect = { x: g.leftX + index * (copyW + copyGap), y, w: copyW, h: buttonH };
+                layout.buttons[`copy_${entry.key}`] = rect;
+                return { ...entry, rect };
+            });
+            y += buttonH + 6;
+        }
         layout.buttons.report = { x: g.leftX, y, w: g.leftW, h: buttonH };
     }
     return layout;
@@ -618,14 +847,21 @@ function drawInspector(node, ctx) {
     node.__soMetadataHitRects = layout.buttons;
 
     ctx.save();
+    if (layout.tools) drawToolPanel(node, ctx, layout.tools, layout.buttons);
     if (layout.status) drawTextBox(ctx, layout.status, "IMAGE", payload.status || "");
     if (layout.final) drawTextBox(ctx, layout.final, "FINAL PROMPT", payload.final_prompt || "");
     if (layout.source) drawTextBox(ctx, layout.source, "SOURCE PROMPT", payload.source_prompt || "");
     if (layout.metadata) drawTextBox(ctx, layout.metadata, "METADATA", payload.resolved_inputs || "");
 
-    if (layout.buttons.final) drawCopyButton(ctx, layout.buttons.final, "📋 Copy final prompt", Boolean(payload.final_prompt));
-    if (layout.buttons.source) drawCopyButton(ctx, layout.buttons.source, "📋 Copy source prompt", Boolean(payload.source_prompt));
-    if (layout.buttons.report) drawCopyButton(ctx, layout.buttons.report, "📋 Copy full metadata report", Boolean(payload.full_report));
+    const flash = node.__soMetadataFlashKey;
+    const pressed = node.__soMetadataPressedKey;
+    if (layout.buttons.final) drawCopyButton(ctx, layout.buttons.final, flash === "final" ? "✓ Final prompt copied" : "📋 Copy final prompt", Boolean(payload.final_prompt), pressed === "final");
+    if (layout.buttons.source) drawCopyButton(ctx, layout.buttons.source, flash === "source" ? "✓ Source prompt copied" : "📋 Copy source prompt", Boolean(payload.source_prompt), pressed === "source");
+    for (const entry of layout.quickCopies || []) {
+        const key = `copy_${entry.key}`;
+        drawCopyButton(ctx, entry.rect, flash === key ? "✓ COPIED" : `⧉ ${entry.label} · ${entry.value}`, true, pressed === key);
+    }
+    if (layout.buttons.report) drawCopyButton(ctx, layout.buttons.report, flash === "report" ? "✓ Metadata copied" : "📋 Copy full metadata report", Boolean(payload.full_report), pressed === "report");
     drawPreviewPanel(node, ctx, layout.preview);
     ctx.restore();
 }
@@ -637,7 +873,7 @@ function pointInRect(pos, rect) {
 
 function installNode(node) {
     node.properties = node.properties || {};
-    node.bgcolor = "#000000";
+    applyStudioNodeColors(node);
     for (const name of HIDDEN_FIELDS) hideBackingWidget(widget(node, name));
     arrangeTopWidgets(node);
 
@@ -671,16 +907,42 @@ function installNode(node) {
         node.onMouseDown = function (event, pos, graphCanvas) {
             const rects = this.__soMetadataHitRects || {};
             const payload = this.__soMetadataPayload || {};
+            if (pointInRect(pos, rects.upload)) {
+                metadataPress(this, "upload");
+                chooseTempFile(this);
+                return true;
+            }
+            if (pointInRect(pos, rects.clear)) {
+                metadataPress(this, "clear");
+                clearLoadedImage(this, true);
+                return true;
+            }
+            if (pointInRect(pos, rects.seed)) {
+                const seedText = String(payload.seed_text || "").trim();
+                if (seedText) metadataCopy(this, "seed", seedText);
+                return true;
+            }
+            if (pointInRect(pos, rects.recipe)) {
+                if (payload.has_metadata && !this.__soMetadataRecipeBusy) saveLoadedMetadataRecipe(this);
+                return true;
+            }
             if (pointInRect(pos, rects.final)) {
-                copyText(payload.final_prompt || "");
+                metadataCopy(this, "final", payload.final_prompt || "");
                 return true;
             }
             if (pointInRect(pos, rects.source)) {
-                copyText(payload.source_prompt || "");
+                metadataCopy(this, "source", payload.source_prompt || "");
                 return true;
             }
+            for (const entry of metadataQuickCopyEntries(payload)) {
+                const key = `copy_${entry.key}`;
+                if (pointInRect(pos, rects[key])) {
+                    metadataCopy(this, key, entry.value);
+                    return true;
+                }
+            }
             if (pointInRect(pos, rects.report)) {
-                copyText(payload.full_report || "");
+                metadataCopy(this, "report", payload.full_report || "");
                 return true;
             }
             return originalMouseDown?.apply(this, arguments);
@@ -696,6 +958,7 @@ function installNode(node) {
     }
 
     node.size = [Math.max(node.size?.[0] || DEFAULT_WIDTH, MIN_WIDTH), Math.max(node.size?.[1] || DEFAULT_HEIGHT, MIN_HEIGHT)];
+    ensureMetadataHeight(node);
     setTimeout(() => arrangeTopWidgets(node), 0);
     setTimeout(() => arrangeTopWidgets(node), 150);
     node.setDirtyCanvas?.(true, true);
@@ -717,9 +980,11 @@ app.registerExtension({
         const originalConfigured = nodeType.prototype.onConfigure;
         const originalExecuted = nodeType.prototype.onExecuted;
         const originalSerialized = nodeType.prototype.onSerialize;
+        const originalResize = nodeType.prototype.onResize;
 
         nodeType.prototype.onNodeCreated = function () {
             const result = originalCreated?.apply(this, arguments);
+            applyStudioNodeColors(this);
             this.size = [Math.max(DEFAULT_WIDTH, MIN_WIDTH), DEFAULT_HEIGHT];
             setTimeout(() => {
                 installNode(this);
@@ -732,6 +997,7 @@ app.registerExtension({
         nodeType.prototype.onConfigure = function (info) {
             const result = originalConfigured?.apply(this, arguments);
             this.properties = this.properties || {};
+            applyStudioNodeColors(this);
             const payload = info?.properties?.so_metadata_core_payload || this.properties.so_metadata_core_payload;
             setTimeout(() => {
                 installNode(this);
@@ -754,6 +1020,21 @@ app.registerExtension({
             this.overIndex = null;
             this.animatedImages = false;
             this.setDirtyCanvas?.(true, true);
+        };
+
+        nodeType.prototype.onResize = function (size) {
+            const minimumHeight = minimumMetadataHeight(this);
+            if (Array.isArray(size) || (size && typeof size === "object")) {
+                size[0] = Math.max(Number(size[0] || 0), MIN_WIDTH);
+                size[1] = Math.max(Number(size[1] || 0), minimumHeight);
+            }
+            const result = originalResize?.apply(this, arguments);
+            if (this.size) {
+                this.size[0] = Math.max(Number(this.size[0] || 0), MIN_WIDTH);
+                this.size[1] = Math.max(Number(this.size[1] || 0), minimumHeight);
+            }
+            this.setDirtyCanvas?.(true, true);
+            return result;
         };
 
         nodeType.prototype.onSerialize = function (data) {

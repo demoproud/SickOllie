@@ -6,7 +6,7 @@
 .so-lib-shell {
     box-sizing: border-box; width: min(2560px, calc(100vw - 32px)); height: min(1800px, calc(100vh - 32px));
     min-width: min(780px, calc(100vw - 32px)); min-height: min(620px, calc(100vh - 32px));
-    display: grid; grid-template-rows: auto auto auto minmax(0,1fr); overflow: hidden;
+    display: grid; grid-template-rows: auto auto minmax(0,1fr); overflow: hidden;
     border: 1px solid rgba(255,62,175,.42); border-radius: 22px;
     background: #0d0a12;
     box-shadow: 0 30px 100px rgba(0,0,0,.62), 0 0 42px rgba(255,62,175,.14);
@@ -25,7 +25,32 @@
 .so-lib-button:disabled { cursor: default; opacity: .42; box-shadow: none; }
 .so-lib-button.active { color: #fff; background: color-mix(in srgb,var(--tone,#48e8ee) 20%,#17131f); box-shadow: inset 0 0 0 1px var(--tone,#48e8ee); }
 .so-lib-icon { width: 34px; padding: 0; font-size: 18px; }
-.so-lib-tools { display: grid; grid-template-columns: minmax(210px,1.4fr) minmax(135px,.55fr) minmax(175px,.7fr) minmax(145px,.6fr) minmax(160px,.65fr) auto auto; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #292430; background: rgba(11,9,15,.8); }
+.so-lib-library-body { min-height: 0; display: grid; grid-template-columns: minmax(210px,270px) minmax(0,1fr); }
+.so-lib-library-content { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0,1fr); }
+.so-lib-sidebar { min-width: 0; min-height: 0; overflow: auto; padding: 10px 0 18px; border-right: 1px solid #2b2631; background: rgba(8,7,12,.94); }
+.so-lib-sidebar-search { box-sizing: border-box; width: calc(100% - 18px); height: 34px; margin: 0 9px 10px; padding: 0 9px; border: 1px solid #403649; border-radius: 8px; outline: 0; color: #fff; background: #0d0b12; font: 10px "Segoe UI",sans-serif; }
+.so-lib-sidebar-search:focus { border-color: #48e8ee; }
+.so-lib-sidebar-title { padding: 9px 11px 6px; color: #48e8ee; font: 900 8px "Segoe UI",sans-serif; letter-spacing: .12em; }
+.so-lib-sidebar-title:not(:first-of-type) { margin-top: 10px; border-top: 1px solid #27222d; }
+.so-lib-sidebar-list { display: flex; flex-direction: column; }
+.so-lib-sidebar-row { box-sizing: border-box; width: 100%; min-height: 31px; display: grid; grid-template-columns: 17px minmax(0,1fr) auto; align-items: center; gap: 4px; padding: 0 9px 0 calc(9px + var(--depth,0) * 13px); border: 0; border-left: 3px solid transparent; color: #bdb5c5; background: transparent; text-align: left; font: 10px "Segoe UI",sans-serif; }
+button.so-lib-sidebar-row { cursor: pointer; }
+.so-lib-sidebar-row:hover { color: #fff; background: rgba(72,232,238,.055); }
+.so-lib-sidebar-row.active { border-left-color: #48e8ee; color: #fff; background: linear-gradient(90deg,rgba(72,232,238,.16),rgba(72,232,238,.035)); }
+.so-lib-sidebar-row b { min-width: 0; overflow: hidden; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.so-lib-sidebar-row em { color: #756e7c; font-style: normal; font-size: 9px; }
+.so-lib-sidebar-caret, .so-lib-sidebar-name, .so-lib-sidebar-delete { min-width: 0; padding: 0; border: 0; color: inherit; background: transparent; cursor: pointer; }
+.so-lib-sidebar-caret { width: 17px; color: #7f7786; }
+.so-lib-sidebar-caret:disabled { cursor: default; }
+.so-lib-sidebar-name { overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; font: inherit; }
+.so-lib-sidebar-delete { display: none; width: 18px; color: #ff78bd; font-size: 14px; }
+.so-lib-sidebar-collections .so-lib-sidebar-row { grid-template-columns: 17px minmax(0,1fr) auto 18px; }
+.so-lib-sidebar-collections .so-lib-sidebar-row:hover .so-lib-sidebar-delete { display: block; }
+.so-lib-sidebar-new { color: #b89aff; }
+.so-lib-tools { display: grid; grid-template-columns: minmax(115px,.65fr) minmax(105px,.55fr) minmax(145px,.75fr) minmax(125px,.65fr) minmax(135px,.7fr) auto auto auto auto; gap: 7px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #292430; background: rgba(11,9,15,.8); }
+.so-lib-selection-tools { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 7px; padding-top: 7px; border-top: 1px solid #292430; }
+.so-lib-selection-tools strong { margin-right: auto; color: #8df8fb; font: 900 9px "Segoe UI",sans-serif; letter-spacing: .08em; }
+.so-lib-current-scope { min-width: 0; overflow: hidden; color: #f4ec51; font: 800 10px "Segoe UI",sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .so-lib-select, .so-lib-scope { box-sizing: border-box; width: 100%; height: 35px; padding: 0 10px; border: 1px solid #463954; border-radius: 9px; outline: none; color: #f7f2fb; background: #0f0c14; font: 700 11px "Segoe UI",sans-serif; }
 .so-lib-scope { overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .so-lib-toggle { display: flex; align-items: center; gap: 7px; color: #dcd4e3; font-size: 11px; white-space: nowrap; cursor: pointer; }
@@ -33,14 +58,19 @@
 .so-lib-grid { min-height: 0; overflow: auto; display: grid; grid-auto-flow: row; grid-auto-rows: max-content !important; grid-template-columns: repeat(auto-fill,minmax(210px,1fr)); gap: 14px; align-content: start; align-items: start; padding: 14px; }
 .so-lib-card { min-width: 0; min-height: 0 !important; height: auto !important; align-self: start !important; display: flex !important; flex-direction: column !important; overflow: hidden; border: 1px solid #403249; border-radius: 12px; background: linear-gradient(150deg,rgba(255,62,175,.09),rgba(72,232,238,.035) 55%,rgba(10,9,14,.98)); box-shadow: 0 10px 28px rgba(0,0,0,.24); cursor: pointer; transition: transform .12s ease,border-color .12s ease; }
 .so-lib-card:hover { transform: translateY(-2px); border-color: #48e8ee88; }
+.so-lib-card.selected { border-color: #ff3eaf; box-shadow: 0 0 0 2px rgba(255,62,175,.24),0 10px 28px rgba(0,0,0,.24); }
 .so-lib-preview { position: relative; width: 100%; flex: 0 0 auto !important; aspect-ratio: 3 / 4; height: auto !important; min-height: 0; overflow: hidden; background: radial-gradient(circle at 18% 15%,#ff3eaf44,transparent 34%),radial-gradient(circle at 82% 20%,#48e8ee33,transparent 38%),#0b0910; }
 .so-lib-preview img { width: 100% !important; height: 100% !important; display: block; object-fit: cover; }
 .so-lib-placeholder { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; color: #7d7287; text-align: center; font: 750 11px/1.45 "Segoe UI",sans-serif; }
 .so-lib-badge { position: absolute; top: 9px; left: 9px; max-width: calc(100% - 18px); padding: 4px 7px; overflow: hidden; border: 1px solid color-mix(in srgb,var(--badge,#48e8ee) 72%,transparent); border-radius: 999px; color: #fff; background: rgba(9,7,13,.78); font: 800 9px "Segoe UI",sans-serif; letter-spacing: .06em; text-overflow: ellipsis; white-space: nowrap; }
 .so-lib-usage-pill { position: absolute; right: 9px; bottom: 9px; padding: 4px 7px; border: 1px solid #48e8ee55; border-radius: 999px; color: #dffcff; background: rgba(7,11,15,.92); font: 750 9px "Segoe UI",sans-serif; }
-.so-lib-card-body { box-sizing: border-box; display: block !important; flex: 0 0 118px !important; min-height: 118px !important; padding: 11px; }
+.so-lib-card-selector { position: absolute; z-index: 3; top: 8px; right: 8px; width: 31px; height: 31px; display: grid; place-items: center; padding: 0; border: 1px solid #48e8eeaa; border-radius: 8px; color: #fff; background: rgba(8,7,12,.84); cursor: pointer; font: 900 16px "Segoe UI",sans-serif; }
+.so-lib-card.selected .so-lib-card-selector { border-color: #ff3eaf; background: rgba(255,62,175,.9); }
+.so-lib-card-body { box-sizing: border-box; display: block !important; flex: 0 0 124px !important; min-height: 124px !important; padding: 11px; }
 .so-lib-card-name { display: block; overflow: hidden; color: #f7f2fb; font-size: 13px; font-weight: 820; text-overflow: ellipsis; white-space: nowrap; }
 .so-lib-card-load { width: 100%; margin: 9px 0 7px; }
+.so-lib-card-quick { display: grid; grid-template-columns: 1fr 1fr 35px; gap: 5px; margin: 9px 0 7px; }
+.so-lib-card-quick .so-lib-button { min-width: 0; padding: 6px 4px; font-size: 9px; }
 .so-lib-card-path { margin-top: 4px; overflow: hidden; color: #91879b; font: 9px Consolas,monospace; text-overflow: ellipsis; white-space: nowrap; }
 .so-lib-card-meta { min-height: 28px; margin: 6px 0 8px; color: #aaa1b3; font-size: 10px; line-height: 1.4; }
 .so-lib-state-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 5px; }
@@ -78,8 +108,29 @@
 .so-lib-picker-list { max-height: 430px; overflow: auto; margin-top: 9px; border: 1px solid #332b3b; border-radius: 9px; }
 .so-lib-picker-item { width: 100%; padding: 9px 10px; border: 0; border-bottom: 1px solid #29222f; color: #dcd4e3; background: #100d15; text-align: left; cursor: pointer; }
 .so-lib-picker-item:hover, .so-lib-picker-item.active { color: #fff; background: #48e8ee18; }
+.so-lib-picker-check { box-sizing: border-box; display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.so-lib-picker-check input { width: 16px; height: 16px; accent-color: #69e49a; }
+.so-lib-picker-check em { color: #817a87; font-size: 9px; font-style: normal; white-space: nowrap; }
 @media (max-width: 1000px) {
+    .so-lib-library-body { grid-template-columns: 190px minmax(0,1fr); }
     .so-lib-tools { grid-template-columns: repeat(3,minmax(0,1fr)); }
     .so-lib-detail { grid-template-columns: 1fr; }
     .so-lib-main-image { min-height: 360px; }
 }
+
+/* Yearbook run configuration: explicit, self-contained comparison settings. */
+.so-lib-yearbook-card { width: min(760px,calc(100vw - 44px)); max-height: calc(100vh - 44px); overflow: auto; }
+.so-lib-form-section-title { margin: 14px 0 7px; color: #48e8ee; font: 850 9px/1.2 "Segoe UI",sans-serif; letter-spacing: .12em; }
+.so-lib-yearbook-settings { display: grid; grid-template-columns: minmax(145px,.75fr) minmax(250px,1.35fr) minmax(210px,1fr); gap: 9px; }
+.so-lib-yearbook-setting { min-width: 0; display: flex; flex-direction: column; gap: 7px; padding: 10px; border: 1px solid #3c3345; border-radius: 10px; background: linear-gradient(145deg,rgba(72,232,238,.045),rgba(244,236,81,.025)); }
+.so-lib-yearbook-setting > span:first-child { color: #f7f2fb; font: 800 10px/1.1 "Segoe UI",sans-serif; letter-spacing: .03em; }
+.so-lib-yearbook-setting small { min-height: 25px; color: #8f8498; font: 9px/1.35 "Segoe UI",sans-serif; }
+.so-lib-number-input { box-sizing: border-box; width: 100%; height: 35px; padding: 0 9px; border: 1px solid #51425e; border-radius: 8px; outline: none; color: #fff; background: #09080d; font: 750 11px "Segoe UI",sans-serif; }
+.so-lib-number-input:focus, .so-lib-yearbook-preset:focus { border-color: #48e8ee; box-shadow: 0 0 0 2px rgba(72,232,238,.10); }
+.so-lib-yearbook-preset { height: 35px; }
+.so-lib-dimension-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center; }
+.so-lib-dimension-row > span { color: #7f7588; font-weight: 850; }
+.so-lib-seed-input { color: #f4ec51; font-family: Consolas,"SFMono-Regular",monospace; letter-spacing: .03em; }
+.so-lib-yearbook-note { margin: 7px 0 0 !important; font-size: 9px !important; }
+.so-lib-yearbook-auto { margin-top: 10px; padding: 9px 10px; border: 1px solid #382f41; border-radius: 9px; background: rgba(255,255,255,.018); }
+@media (max-width: 760px) { .so-lib-yearbook-settings { grid-template-columns: 1fr; } }

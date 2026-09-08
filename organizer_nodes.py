@@ -16,7 +16,7 @@ class SoloLoraOrganizerLauncher:
 
 
 class SoloLogOrganizerLauncher:
-    """Compact launcher for Prompt Core-compatible log cleanup and organization."""
+    """Legacy launcher retained so saved workflows continue to open safely."""
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -26,10 +26,10 @@ class SoloLogOrganizerLauncher:
     RETURN_NAMES = ("status",)
     FUNCTION = "status"
     CATEGORY = "Sick Ollie/Utilities"
-    DESCRIPTION = "Opens the preview-first SOLO Log Organizer without queueing a workflow."
+    DESCRIPTION = "Legacy compatibility launcher for workflows that already contain SOLO Log Organizer."
 
     def status(self):
-        return ("SOLO Log Organizer is available from this node's Open Organizer button.",)
+        return ("Legacy SOLO Log Organizer compatibility is available from this node's button.",)
 
 
 NODE_CLASS_MAPPINGS = {

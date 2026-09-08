@@ -317,6 +317,14 @@ class SOGenerationPipeline(_ClipVaeCacheMixin):
                 ),
             },
             "optional": {
+                "seed_input": (
+                    "INT",
+                    {
+                        "forceInput": True,
+                        "default": -1,
+                        "tooltip": "Optional external seed override. When connected, this value replaces the Generation Core seed widget for the current run.",
+                    },
+                ),
                 "positive_conditioning": (
                     "CONDITIONING",
                     {
@@ -369,13 +377,18 @@ class SOGenerationPipeline(_ClipVaeCacheMixin):
         denoise,
         shift,
         seed_value,
+        seed_input=None,
         positive_conditioning=None,
         negative_conditioning=None,
         prompt=None,
         extra_pnginfo=None,
         unique_id=None,
     ):
-        seed_used = int(seed_value)
+        seed_source = seed_input if seed_input is not None else seed_value
+        try:
+            seed_used = int(seed_source)
+        except Exception:
+            seed_used = int(seed_value)
         if seed_used == -1:
             seed_used = random.randint(0, SEED_MAX)
         else:

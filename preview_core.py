@@ -23,7 +23,7 @@ class SOFitPreview(comfy_nodes.PreviewImage):
                     "Blurred Image",
                 ], {"default": "Solid"}),
                 "background_color": ("STRING", {
-                    "default": "#111111",
+                    "default": "#08070c",
                     "multiline": False,
                     "tooltip": "Hex background color used by Solid mode.",
                 }),
@@ -47,7 +47,7 @@ class SOFitPreview(comfy_nodes.PreviewImage):
         images,
         fit_mode="Contain + Upscale",
         background_mode="Solid",
-        background_color="#111111",
+        background_color="#08070c",
         prompt=None,
         extra_pnginfo=None,
     ):

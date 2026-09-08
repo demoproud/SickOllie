@@ -3,6 +3,7 @@ WEB_DIRECTORY = "./js"
 # Registers the SOLO Catalog / Library Review API without adding a classic node.
 from . import solo_library_review as _solo_library_review  # noqa: F401
 from . import solo_recipe_catalog as _solo_recipe_catalog  # noqa: F401
+from . import solo_outfit_forge as _solo_outfit_forge  # noqa: F401
 from .solo_lora_organizer import routes as _solo_lora_organizer_routes  # noqa: F401
 from .solo_log_organizer import routes as _solo_log_organizer_routes  # noqa: F401
 

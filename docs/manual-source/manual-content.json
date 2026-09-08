@@ -1,0 +1,1327 @@
+[
+  {
+    "id": "start",
+    "title": "Your first five minutes",
+    "deck": "Choose → Load → Generate → Compare → Save → Reuse",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "01 / Choose your engine",
+        "body": "Add Loader Core, Prompt Core, Generation Core, Output Core and Preview Core from the ComfyUI node menu. Wire them as shown on the next page. In Loader Core, choose an installed diffusion model. In Generation Core, select its compatible text encoder, VAE and CLIP type. Select settings appropriate to your own model before queueing; the package includes no sample workflow or model weights."
+      },
+      {
+        "type": "text",
+        "title": "02 / Make one image",
+        "body": "Keep Main LoRA disabled for a first base-model check, or enable an installed LoRA and set its strength. Set Prompt Core to Manual and enter a complete description, such as: photo of a woman wearing a cyan rain jacket in a sunlit greenhouse. Choose a modest canvas and queue once. Generation Core sends samples and VAE to Output Core; Output saves and passes images to Preview Core."
+      },
+      {
+        "type": "text",
+        "title": "03 / Keep the result useful",
+        "body": "Press Pin + Compare on a result you want to study. Change one prompt or model setting and generate again. Clear removes the reference. Save to Library preserves the displayed result with available generation information. Open Creative Library from Studio Hub when you want to reuse it."
+      },
+      {
+        "type": "callout",
+        "title": "Start small, then automate",
+        "body": "First make one successful image. Then import your own TXT content or a separately supplied Library Pack, try a Template, and test a small preview run. Installed model files are selected locally; they are not bundled."
+      }
+    ],
+    "layer": "START HERE"
+  },
+  {
+    "id": "map",
+    "title": "One connected studio",
+    "deck": "The Library supplies reusable choices. The nodes turn those choices into images.",
+    "blocks": [
+      {
+        "type": "map"
+      },
+      {
+        "type": "table",
+        "title": "What travels between systems",
+        "rows": [
+          [
+            "LoRA Library → Loader",
+            "An installed LoRA or Collection scope"
+          ],
+          [
+            "Templates / Prompts → Prompt",
+            "Reusable source or resolved prompt text"
+          ],
+          [
+            "Wardrobe / Looks / Scenes → Prompt",
+            "Outfit A/B/C and Scene values"
+          ],
+          [
+            "Metadata → Prompt + Generation",
+            "Recovered text and an available seed"
+          ],
+          [
+            "Preview / Metadata → Creative Library",
+            "An image plus reusable generation information"
+          ]
+        ]
+      },
+      {
+        "type": "callout",
+        "title": "A useful separation",
+        "body": "Generation Core produces latent samples and a VAE. Output Core decodes and saves them in a simple Studio workflow, then supplies the IMAGE used by Preview Core. Image Metadata Core is a separate reuse station."
+      }
+    ],
+    "layer": "START HERE"
+  },
+  {
+    "id": "libraries",
+    "title": "Four creative libraries",
+    "deck": "Find the ingredient by what you want to reuse.",
+    "blocks": [
+      {
+        "type": "pair",
+        "left": [
+          "TEMPLATES",
+          "Formulas with recognized unresolved placeholders. Example: photo of a woman wearing OUTFIT in SCENE."
+        ],
+        "right": [
+          "PROMPTS",
+          "Resolved, token-free text. Example: photo of a woman wearing a cyan rain jacket in a greenhouse."
+        ]
+      },
+      {
+        "type": "pair",
+        "left": [
+          "OUTFITS",
+          "Wardrobe holds pieces and styling material. Looks holds complete outfit values ready for an Outfit slot."
+        ],
+        "right": [
+          "SCENES",
+          "Location and environment values ready for Prompt Core’s Scene component."
+        ]
+      },
+      {
+        "type": "pair",
+        "left": [
+          "HOME",
+          "Where the asset lives: its canonical category/subcategory. Move Home changes that location."
+        ],
+        "right": [
+          "COLLECTION",
+          "A reusable creative grouping. One asset can participate in multiple Collections without moving."
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Open the right workspace",
+        "body": "Studio Hub brings together Creative Library, LoRA Library, Outfit Forge and LoRA Organizer. Creative Library manages text and generation assets. LoRA Library manages the visual review of installed model files."
+      }
+    ],
+    "layer": "THE CREATIVE LIBRARY"
+  },
+  {
+    "id": "reuse",
+    "title": "Save something you can use again",
+    "deck": "An image becomes more valuable when its source survives.",
+    "blocks": [
+      {
+        "type": "pair",
+        "left": [
+          "SAVE TO LIBRARY",
+          "Capture a displayed generation or a metadata-bearing image as reusable Library material. Available prompt assembly and settings travel with it."
+        ],
+        "right": [
+          "GENERATE PREVIEW",
+          "Run existing Library assets through the active Studio workflow to create or replace their review images."
+        ]
+      },
+      {
+        "type": "pair",
+        "left": [
+          "SOURCE / REUSABLE",
+          "The portable prompt formula. Keep identity-related placeholders such as NAME and BRAND reusable when the captured data supports them."
+        ],
+        "right": [
+          "THUMBNAIL COMBINATION",
+          "The resolved Outfit and Scene combination represented by the image. Choose this when the captured styling is the starting point."
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Load with intention",
+        "body": "On a Prompt or Template, choose Load and inspect the apply choices. Loading changes the active graph. Available source or captured component information can be applied; missing image metadata cannot be reconstructed by the Library."
+      },
+      {
+        "type": "callout",
+        "title": "Saved Generation Recipes",
+        "body": "A Recipe preserves generation state behind saves, image imports and reuse. It is an advanced asset that supports the four creative libraries, rather than another beginner tab to learn."
+      }
+    ],
+    "layer": "THE CREATIVE LIBRARY"
+  },
+  {
+    "id": "inspector",
+    "title": "Review at full size",
+    "deck": "Click a thumbnail or View. Loading the asset is a separate action.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "One stable review session",
+        "body": "The large window stays fixed relative to your viewport. Metadata scrolls independently of the image. Left and Right browse the active filtered Home or Collection, including items beyond the current gallery page. Rating changes do not reorder that open session; reopen to adopt a new filter order."
+      },
+      {
+        "type": "pair",
+        "left": [
+          "FIT + ZOOM",
+          "Fit shows the whole image. − and + range from 50% to 400% of Fit. Click the image to switch Fit / 200% of Fit; scroll to pan. This is not a native-pixel percentage."
+        ],
+        "right": [
+          "RATE + DELETE",
+          "Use the stars or keys 1–5. Key 0 clears; clicking the current star rating also clears. Delete Asset or the Delete key opens confirmation, then review continues through survivors."
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Copy the useful fields",
+        "body": "Prompt/Template records show Final Prompt, Source Prompt, Outfit A/B/C, Scene and a trusted Seed when captured. Copy All includes populated fields with labels; a captured seed of 0 is valid. A missing seed stays unavailable."
+      },
+      {
+        "type": "callout",
+        "title": "No thumbnail yet?",
+        "body": "View still opens a useful Inspector. Use Generate Preview to make the first image. Escape or Done closes the Inspector; nested text editors own their typing keys."
+      }
+    ],
+    "layer": "THE CREATIVE LIBRARY"
+  },
+  {
+    "id": "inspector-actions",
+    "title": "The right actions for the record",
+    "deck": "The Inspector adapts to the kind of asset you opened.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Action sets",
+        "rows": [
+          [
+            "Prompt / Template",
+            "Load · Queue · Queue Next · Edit · Collections · Generate Preview · Delete Thumbnail"
+          ],
+          [
+            "Outfit Look",
+            "Load A/B/C · Move Home · Collections · Generate Preview · Delete Thumbnail · Source Recipe when available"
+          ],
+          [
+            "Scene",
+            "Load Scene · Move Home · Collections · Generate Preview · Delete Thumbnail · Source Recipe when available"
+          ],
+          [
+            "Wardrobe",
+            "+ Builder · Load A/B/C · Edit · Collections · Generate Preview"
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Deletion has a specific meaning",
+        "body": "Deleting a Prompt/Template archives a source-backed record or deletes an imported record; original source files and saved Recipes remain. Deleting a Look/Scene removes the asset and thumbnail and prevents silent reconstruction from old sources; saved Recipe text remains. Deleting Wardrobe removes the piece, thumbnail and relationships while preserving saved Look text."
+      },
+      {
+        "type": "callout",
+        "title": "Thumbnail maintenance is separate",
+        "body": "Delete Thumbnail removes the review image while retaining the asset. Wardrobe thumbnail deletion is available through bulk curation, not a dedicated Inspector button. Prompt/Template card-level Preview and Delete Thumb buttons are retired."
+      }
+    ],
+    "layer": "THE CREATIVE LIBRARY"
+  },
+  {
+    "id": "loader",
+    "title": "Choose the model and LoRA",
+    "deck": "Loader Core controls the model stack and the Main LoRA testing pool.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Use these controls first",
+        "body": "Click Diffusion model, choose Main LoRA, set Enabled and Strength, then choose Folder scope. The scope browser also includes LoRA Collections. LIB opens LoRA Library in that current scope. The output model feeds Generation Core; clean_name, main_trigger and main_folder are reusable strings."
+      },
+      {
+        "type": "pair",
+        "left": [
+          "MODEL AFTER GENERATE",
+          "Fixed, Increment, Decrement, Randomize and Shuffle advance the diffusion selector independently."
+        ],
+        "right": [
+          "MAIN LORA AFTER GENERATE",
+          "The Testing section advances the Main LoRA within its filtered pool. Include subfolders expands physical scope. Skip None avoids the empty choice."
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Narrow a testing pool",
+        "body": "Use Epoch, Library filter and Sort before a run. Sort supports Name, Most used, Least used and Recently used. The Main row shows availability and use information. Review buttons assign Favorite, Keep, Retest or Reject directly from the node."
+      },
+      {
+        "type": "callout",
+        "title": "Leave Advanced for later",
+        "body": "Advanced reveals Loop cycle and Off name. Click Clean name to choose the naming cleanup. The trigger row copies the phrase; the pencil edits it, and info opens model details. Secondary LoRAs are covered next."
+      }
+    ],
+    "layer": "THE CORE NODES"
+  },
+  {
+    "id": "secondary",
+    "title": "Build a controlled LoRA stack",
+    "deck": "Use Main for the variable you are testing; add secondary influences deliberately.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Add only what you need",
+        "body": "Choose Add Secondary LoRA and select an installed model. The stack supports up to ten selected secondary LoRAs. Each row has its own Enabled switch, Strength, model browser, trigger copy, trigger edit, information and remove action."
+      },
+      {
+        "type": "pair",
+        "left": [
+          "MODEL APPLICATION",
+          "Enabled secondary entries join the model stack. Adjust strength on the row. Removing a row changes the workflow stack; it does not delete the LoRA file."
+        ],
+        "right": [
+          "TRIGGER WORDS",
+          "Secondary trigger copy/edit controls use the shared trigger resolver, but Prompt Core’s main_trigger connection carries the Main LoRA phrase. Secondary phrases are not automatically assembled into that socket."
+        ]
+      },
+      {
+        "type": "text",
+        "title": "A repeatable comparison",
+        "body": "Keep secondary strengths fixed while cycling Main LoRA. Hold seed, dimensions and prompt steady for a useful comparison. Generation Core’s live shelf shows the actual applied Main and enabled secondary models, even when dropdowns have already advanced."
+      },
+      {
+        "type": "callout",
+        "title": "Model information dependency",
+        "body": "The Studio Loader uses rgthree-comfy’s model information services. Its secondary stack itself is drawn by Studio. If the Loader interface fails to initialize, check that dependency before changing model files."
+      }
+    ],
+    "layer": "THE CORE NODES"
+  },
+  {
+    "id": "prompt",
+    "title": "Three ways to supply a prompt",
+    "deck": "Prompt Core assembles the text that reaches Generation Core.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Prompt Source",
+        "rows": [
+          [
+            "Manual",
+            "Type or edit a local draft. Click the source text area to open its editor."
+          ],
+          [
+            "Prompt Input",
+            "Use the connected manual_prompt_input STRING socket, often Final Prompt or Source Prompt from Image Metadata Core."
+          ],
+          [
+            "Prompt Log",
+            "Select a log and line; choose how its index advances after queueing."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "A wire can stay attached",
+        "body": "Switch back to Manual without disconnecting Prompt Input. The incoming value is remembered separately and does not overwrite your Manual draft. Select Prompt Input when you want to use it again."
+      },
+      {
+        "type": "text",
+        "title": "Components have their own sources",
+        "body": "Outfit A/B/C and Scene each choose a Manual value or an Outfit / Scene log. Collection-backed sources appear in the same browser. Manual components remain fixed; log components use their selected mode and index."
+      },
+      {
+        "type": "callout",
+        "title": "Inputs and output",
+        "body": "The useful first connections are main_trigger from Loader and optional manual_prompt_input from Metadata. final_prompt connects to Generation Core’s positive_text. Source selection and component placement are independent decisions."
+      }
+    ],
+    "layer": "THE CORE NODES"
+  },
+  {
+    "id": "assembly",
+    "title": "Make placeholders do the work",
+    "deck": "Write a formula, then control where each component is placed.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Placement behavior",
+        "rows": [
+          [
+            "Auto",
+            "Outfit/Scene: replace its placeholder if found, otherwise append. Trigger: replace TRIGGER if found, otherwise prepend."
+          ],
+          [
+            "Placeholder",
+            "Insert only where the matching token occurs. A missing token means no placement."
+          ],
+          [
+            "Beginning / End",
+            "Remove matching placeholder occurrences and place the value at the chosen edge."
+          ],
+          [
+            "Off",
+            "Remove the matching placeholder and do not insert its value."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Use exact tokens",
+        "body": "The default component aliases include OUTFIT / OUTFIT_A, OUTFIT_B, OUTFIT_C and SCENE. NAME is a substitution slot. The configurable ITEM slot can be renamed BRAND. Matching is case-sensitive and accepts supported bare or braced aliases at token boundaries; ordinary lowercase prose is not a token."
+      },
+      {
+        "type": "text",
+        "title": "Affixes participate too",
+        "body": "Enabled Prefix and Suffix join the source before component resolution. Their Outfit/Scene placeholders resolve and activate the relevant log progression. NAME and ITEM substitutions can then resolve inside inserted component values."
+      },
+      {
+        "type": "callout",
+        "title": "Keep the advanced layer explicit",
+        "body": "Creative Library recognizes additional portable tokens, including LOCATION, TRIGGER and specialty tokens listed in the reference. Recognition makes a Template; it does not create a dedicated resolver for every word. Configure a slot or edit unsupported values before generation. Advanced contains separator and optional regex cleanup."
+      }
+    ],
+    "layer": "THE CORE NODES"
+  },
+  {
+    "id": "generation",
+    "title": "Set the canvas, then the seed",
+    "deck": "Generation Core samples the image and reports what actually ran.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "First controls",
+        "body": "Choose compatible Text encoder and VAE files. Set Resolution to Preset for Aspect + Megapixels, or Custom for Width + Height; the swap control reverses custom dimensions. Start with Batch 1 and the model’s appropriate sampling settings. Sampler, Scheduler, Steps, CFG, Denoise and Shift are editable rows."
+      },
+      {
+        "type": "table",
+        "title": "Seed choices",
+        "rows": [
+          [
+            "Random each run",
+            "Set -1 for a fresh random seed on each execution."
+          ],
+          [
+            "New fixed random",
+            "Choose one new random seed and hold it for comparisons."
+          ],
+          [
+            "Use last queued",
+            "Reuse the last seed recorded by the node. Click the seed-copy row to copy the recorded seed."
+          ],
+          [
+            "seed_input",
+            "A connected INT overrides the widget for the run. A connected -1 still randomizes."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Read the live shelf",
+        "body": "The applied LoRA monitor reflects execution state, including enabled secondary LoRAs. With a direct Loader connection it follows that Loader. The shelf may differ from selectors that have advanced for the next run."
+      },
+      {
+        "type": "callout",
+        "title": "Connections",
+        "body": "Loader model + Prompt final_prompt enter Generation. samples and vae leave it for Output Core or a compatible decode path. Advanced CLIP type/device and external conditioning belong in the reference workflow."
+      }
+    ],
+    "layer": "THE CORE NODES"
+  },
+  {
+    "id": "preview",
+    "title": "Compare without losing the moment",
+    "deck": "Preview Core keeps the reference beside the live result.",
+    "blocks": [
+      {
+        "type": "pair",
+        "left": [
+          "NORMAL PREVIEW",
+          "Review the incoming IMAGE. FIT, BG and Background Color change presentation, not the saved generation itself."
+        ],
+        "right": [
+          "PIN + COMPARE",
+          "Capture the currently displayed image and immediately open it beside the live Preview. Generate another result to compare."
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Clear the reference",
+        "body": "Clear removes the pinned image and returns the node to normal width. Use it when the comparison is finished or when starting another visual question."
+      },
+      {
+        "type": "text",
+        "title": "Save the displayed result",
+        "body": "Save to Library sends the verified shown image with available prompt assembly and generation state into Creative Library. It is the current name of the reusable-save action. Separate Pin, Compare, Recipe and Library Thumb actions are not the v4 toolbar."
+      },
+      {
+        "type": "callout",
+        "title": "A better comparison habit",
+        "body": "Change one influential setting at a time: LoRA strength, one phrase, seed or dimensions. Pin a useful baseline, generate the change and decide what to save. The three primary actions are Pin + Compare, Clear and Save to Library."
+      }
+    ],
+    "layer": "THE CORE NODES"
+  },
+  {
+    "id": "metadata",
+    "title": "Bring an old image back to work",
+    "deck": "Image Metadata Core is the bridge from an image to a new generation.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Inspect before applying",
+        "body": "Load an image file. Read Final Prompt, Source Prompt, seed and the available resolved Outfit A/B/C and Scene values. Copy individual fields or the full report. A truly connected IMAGE input takes precedence over a manually chosen file; disconnect it when you want to inspect files independently."
+      },
+      {
+        "type": "table",
+        "title": "Two useful workflows",
+        "rows": [
+          [
+            "Recreate / modify",
+            "Metadata final_prompt or source_prompt → Prompt manual_prompt_input. Select Prompt Input. Metadata seed → Generation seed_input. Apply available component values as needed."
+          ],
+          [
+            "Build reusable Library material",
+            "Load image → inspect recovered fields → Save to Library. The loaded image can become the preview."
+          ]
+        ]
+      },
+      {
+        "type": "pair",
+        "left": [
+          "FINAL PROMPT",
+          "Start from the resolved text used by that generation. Avoid adding the same components or trigger again."
+        ],
+        "right": [
+          "SOURCE PROMPT",
+          "Start from a recoverable reusable formula. Restore its component values or choose new ones before generating."
+        ]
+      },
+      {
+        "type": "callout",
+        "title": "Respect the graph direction",
+        "body": "Keep Metadata independent of the output path when feeding its text/seed back into generation. Wiring the new result back into that same Metadata node creates a graph cycle. Keep Metadata separate when using its outputs for reuse."
+      }
+    ],
+    "layer": "THE CORE NODES"
+  },
+  {
+    "id": "metadata-detail",
+    "title": "Recover what the image carries",
+    "deck": "Available fields depend on the source image and how it was saved.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Metadata sources",
+        "rows": [
+          [
+            "Native SICK OLLIE data",
+            "Can preserve source and final prompt, assembly values, models and resolved generation information."
+          ],
+          [
+            "ComfyUI prompt / workflow data",
+            "Can recover recognized node settings and prompt values; arbitrary custom workflows may provide less."
+          ],
+          [
+            "Common parameters metadata",
+            "Can recover conventional prompt, seed and generation fields when present."
+          ],
+          [
+            "No embedded metadata",
+            "The picture remains viewable. Prompt text, seed and missing component values cannot be inferred exactly from pixels."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Queued images remain valid",
+        "body": "Loading another file or clearing the visible image is designed to preserve imports already queued. Temporary source files are retired later rather than removed underneath pending work."
+      },
+      {
+        "type": "text",
+        "title": "More outputs when you need them",
+        "body": "The node provides images, final_prompt, source_prompt, seed, generation_settings, models, resolved_inputs, full_report, metadata_json and has_metadata. Use the structured or report outputs only when another workflow needs them."
+      },
+      {
+        "type": "callout",
+        "title": "Reproduction is conditional",
+        "body": "A matching seed alone does not reproduce an image. Model files, LoRAs, conditioning, dimensions and sampling settings also matter. Output metadata toggles determine which information survives saving."
+      }
+    ],
+    "layer": "THE CORE NODES"
+  },
+  {
+    "id": "output",
+    "title": "Save images with a way back",
+    "deck": "Output Core controls destination, file naming and metadata.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Start with Output root",
+        "body": "Choose a folder beneath ComfyUI output. Connect samples + vae from Generation Core and Output decodes them. If an images input is connected, that IMAGE takes priority. Output returns images for Preview."
+      },
+      {
+        "type": "table",
+        "title": "Practical controls",
+        "rows": [
+          [
+            "Subfolder recipe",
+            "Combine literal text with up to four variables and a delimiter."
+          ],
+          [
+            "Filename recipe",
+            "Combine literal text with up to six variables and a delimiter."
+          ],
+          [
+            "Format / Quality / Counter digits",
+            "PNG, JPG or WebP; quality affects JPG/WebP, while PNG ignores it. Counter digits control numbering."
+          ],
+          [
+            "Prompt / Workflow / Civitai metadata",
+            "Choose which prompt, reloadable workflow and common parameters information to embed."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Use the context that already exists",
+        "body": "Output reads connected Studio context for naming and metadata. Resolved input rows can be clicked to copy. The latest saved path helps locate the result without reconstructing a filename."
+      },
+      {
+        "type": "callout",
+        "title": "Keep round-tripping practical",
+        "body": "PNG with metadata enabled is a useful starting point for reuse. There is no standalone public Strip Triggers switch in this endpoint: manage trigger placement in Prompt Core and inspect already resolved text before reusing it."
+      }
+    ],
+    "layer": "THE CORE NODES"
+  },
+  {
+    "id": "discoveries",
+    "title": "Small controls, shorter workflows",
+    "deck": "These are worth learning even if you used them in v3.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Click the value, not just the obvious button",
+        "rows": [
+          [
+            "Prompt assembly chips",
+            "Outfit/Scene chips open placement. TRIGGER opens Trigger Builder."
+          ],
+          [
+            "Placeholder labels",
+            "Edit the configured token itself, including the ITEM / BRAND label."
+          ],
+          [
+            "Local values",
+            "Click a displayed value to open its editor."
+          ],
+          [
+            "Connected values",
+            "Click to pulse the supplying node instead of editing its output here."
+          ],
+          [
+            "Resolved prompt / output rows",
+            "Copy the assembled prompt or resolved output information directly."
+          ],
+          [
+            "Loader trigger row",
+            "Copy the trigger; use its pencil for a saved override and info for details."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Read color and status together",
+        "body": "Prompt tokens are color-coded. Assembly status distinguishes used values, unplaced placeholders, missing sources and disabled placement. A displayed value can be present without being used: check the placement status before queueing."
+      },
+      {
+        "type": "callout",
+        "title": "Open Advanced only with a purpose",
+        "body": "Loader hides loop/off-name controls; Prompt hides separator and cleanup; Generation hides CLIP type/device. These controls are available without making the first run a settings survey. Text editors support Ctrl/Cmd+Enter to save where shown."
+      }
+    ],
+    "layer": "LIBRARY POWER TOOLS"
+  },
+  {
+    "id": "automation",
+    "title": "Load, Queue or Queue Next?",
+    "deck": "Choose whether you want to change the canvas or submit a job.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Intent → action",
+        "rows": [
+          [
+            "Load",
+            "Intentionally applies the asset to the active Studio workflow."
+          ],
+          [
+            "Queue",
+            "Submits a generation for the asset, then restores the visible working state."
+          ],
+          [
+            "Queue Next",
+            "Places a Prompt/Template at the front of pending queue work. It does not interrupt the currently running generation."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Progression happens around queueing",
+        "body": "Fixed holds a selection. Increment and Decrement walk the active pool. Randomize selects randomly; Shuffle uses the pool’s shuffle state. Model and Main LoRA controls are independent. Prompt and component log modes act on relevant active streams; Manual values stay fixed."
+      },
+      {
+        "type": "text",
+        "title": "Keep batches understandable",
+        "body": "Prompt batches have a 400-item safety limit. Use multiple passes for larger scopes. Generate Previews and LoRA Yearbook use sequential capture and wait for earlier ComfyUI queue work before arming thumbnail collection."
+      },
+      {
+        "type": "callout",
+        "title": "Run state comes back",
+        "body": "Automated runs temporarily route outputs under output/Sick Ollie Yearbooks/Creative Library or output/Sick Ollie Yearbooks/LoRA Library. Original node settings and Output paths are restored when a run completes or stops. Verify interruption behavior in Desktop before an unattended production run."
+      }
+    ],
+    "layer": "LIBRARY POWER TOOLS"
+  },
+  {
+    "id": "previews",
+    "title": "Make the Library worth browsing",
+    "deck": "Generate Previews gives existing assets a consistent visual test.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Choose a small scope first",
+        "body": "Open Generate Previews from the Library. Choose selected items, the current filtered results, a Home or Collection, selected sections or the complete Creative Library. Templates, Prompts, Wardrobe, Outfit Looks and Scenes participate in one scope workflow."
+      },
+      {
+        "type": "pair",
+        "left": [
+          "GENERATION SIZE",
+          "Creative Library defaults to 800 × 1000. Fast and larger presets remain available, with custom sizing where offered. Scenes turn the selected dimensions into landscape orientation."
+        ],
+        "right": [
+          "STORED PREVIEW",
+          "Compact WebP preserves aspect ratio and up to 2048 px on the longest edge, within a 512 KiB budget. Small originals are not enlarged; complex images may be reduced to meet the budget."
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Follow the run",
+        "body": "The run generates and captures assets sequentially, restoring temporary state afterward. Open Theater for live review. Closing Theater does not stop generation; use the run’s stop control to end it."
+      },
+      {
+        "type": "callout",
+        "title": "Existing previews do not change themselves",
+        "body": "Regenerate or replace an older thumbnail from a larger source to gain detail. Encoding respects EXIF orientation and replaces files atomically; failed replacement preserves the previous valid image. LoRA Yearbook has its own size choices."
+      }
+    ],
+    "layer": "LIBRARY POWER TOOLS"
+  },
+  {
+    "id": "theater",
+    "title": "Review while generation continues",
+    "deck": "Theater is a live review environment with its own history.",
+    "blocks": [
+      {
+        "type": "pair",
+        "left": [
+          "LIVE",
+          "Follows the newest completed thumbnail automatically. Run progress remains visible."
+        ],
+        "right": [
+          "FROZEN",
+          "Browse earlier completed images with Left/Right while the underlying run continues. Return to Live to follow new results."
+        ]
+      },
+      {
+        "type": "table",
+        "title": "Two review systems",
+        "rows": [
+          [
+            "Creative Library Theater",
+            "1–5 assigns stars. X toggles Reject. Use its rating controls to clear a selected rating; Inspector additionally has key 0."
+          ],
+          [
+            "LoRA Theater",
+            "F or 1 = Favorite. L or 2 = Like (stored Keep). R or 3 = Retest. X = Reject. Choosing the same review state again clears it."
+          ],
+          [
+            "Both",
+            "Space toggles Live/Frozen. Left/Right browse history. Escape closes Theater. Fit / Fill / Actual control image display."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Close the window, keep the run",
+        "body": "Theater can be closed without stopping Yearbook or Generate Previews. Reopen it during an active run using Theater. Its history belongs to that run; the persistent asset rating or review state belongs to the Library."
+      },
+      {
+        "type": "callout",
+        "title": "Use the correct meaning of a rating",
+        "body": "LoRA review states describe a model’s testing status. Creative Library stars describe reusable creative assets. They are separate systems with different shortcuts; do not read LoRA key 3 as three stars."
+      }
+    ],
+    "layer": "LIBRARY POWER TOOLS"
+  },
+  {
+    "id": "curation",
+    "title": "Curate a scope with confidence",
+    "deck": "Search first. Check the selection. Then apply the operation.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Narrow the result set",
+        "body": "Use Home or Collection navigation, text search, ratings, placeholder filters and the available facets. Prompt/Template source-log navigation retains Original Log order when available. A filter changes what you are browsing; it does not move assets."
+      },
+      {
+        "type": "text",
+        "title": "Select Multiple",
+        "body": "Multi-select exposes the bulk actions relevant to that asset kind: Collection membership, organization, Builder operations, thumbnail deletion/regeneration or record deletion. Read whether an action targets selected cards, current filtered results or a wider scope."
+      },
+      {
+        "type": "pair",
+        "left": [
+          "MOVE HOME",
+          "Change an asset’s canonical location. Use the appropriate Home editor or bulk organization controls."
+        ],
+        "right": [
+          "COLLECT",
+          "Add creative group membership without moving the asset. Deleting a Collection removes the group, not its member assets."
+        ]
+      },
+      {
+        "type": "callout",
+        "title": "Review before broad deletion",
+        "body": "Inspector is best for one-at-a-time decisions; bulk controls are best for a deliberate scope. Source-backed and imported records can have different delete behavior. Purge and orphan cleanup are separate maintenance tools covered later."
+      }
+    ],
+    "layer": "LIBRARY POWER TOOLS"
+  },
+  {
+    "id": "packs",
+    "title": "Move a Library, or just a capsule",
+    "deck": "Library Menu → Library Pack is the portable-content entry point.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Choose the smallest useful export",
+        "rows": [
+          [
+            "Starter / Share Pack",
+            "A shareable creative selection."
+          ],
+          [
+            "Wardrobe & Looks",
+            "Reusable clothing material and complete outfits."
+          ],
+          [
+            "Current Scope",
+            "The active tab, Home, Collection and filters."
+          ],
+          [
+            "Full Backup",
+            "A broad Creative Library backup."
+          ],
+          [
+            "Custom",
+            "Select the libraries, organization and optional thumbnails you want."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Import deliberately",
+        "body": "Choose Import Library Pack, inspect its contents, then select what to merge. Required linked dependencies remain automatic. Unselected and unrelated local content is not deleted. Reimporting a known pack can reconcile organization supplied by that pack while preserving locally owned review, previews and organization."
+      },
+      {
+        "type": "text",
+        "title": "TXT is still useful",
+        "body": "Import an existing prompt log when text is your source. Mixed lines are routed to Templates or Prompts according to recognized unresolved placeholders. Managed copies can preserve source-log provenance and order; originals are not rewritten by the import."
+      },
+      {
+        "type": "callout",
+        "title": "A pack is not a model install",
+        "body": "The .soslibrary file moves Library content, not installed diffusion models or LoRA weights. Full Backup describes Creative Library scope; preserve the user-data folder and input logs too when backing up the whole installation."
+      }
+    ],
+    "layer": "LIBRARY POWER TOOLS"
+  },
+  {
+    "id": "lora",
+    "title": "Browse and test your LoRAs",
+    "deck": "LoRA Library is the review workbench for installed model files.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Find the model in context",
+        "body": "Use the searchable nested folder sidebar, review filters and model search. Open details for trigger evidence, thumbnail provenance, usage history and Civitai information. Fill from Civitai can supply missing references; optional online lookup needs a working connection."
+      },
+      {
+        "type": "pair",
+        "left": [
+          "PHYSICAL FOLDER",
+          "A real directory of LoRA files. Scan LoRA folders scans configured roots; Scan current folder targets a selected physical subtree."
+        ],
+        "right": [
+          "LORA COLLECTION",
+          "A virtual testing group across folders. Multi-select to manage membership. Choose a physical folder before scanning; scanning is unavailable in a Collection."
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Send a choice back to Studio",
+        "body": "Load LoRA selects it in Loader Core with fixed progression. Per-card Queue uses the active workflow. Queue Current View submits the visible filtered set in order or shuffled. Loader’s Folder scope can select a Collection, and LIB carries that scope back here."
+      },
+      {
+        "type": "callout",
+        "title": "Library vs Organizer",
+        "body": "LoRA Library browses, tests, reviews, queues, thumbnails and groups models. LoRA Organizer plans and performs filesystem naming, moves and cleanup. Choose Organizer only when you intend to change files on disk."
+      }
+    ],
+    "layer": "LORA LIBRARY"
+  },
+  {
+    "id": "yearbook",
+    "title": "Give every checkpoint a fair test",
+    "deck": "LoRA Yearbook runs a controlled visual comparison.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Set the comparison",
+        "body": "Filter to the intended LoRAs, then open Yearbook run. Set the shared prompt, LoRA strength, dimensions and seed. A fixed seed makes comparisons easier to interpret. The LoRA Yearbook dialog has its own presets and defaults, independent of Creative Library’s 800 × 1000 default."
+      },
+      {
+        "type": "table",
+        "title": "Choose thumbnail policy and order",
+        "rows": [
+          [
+            "Fill missing",
+            "Generate entries that lack the requested thumbnail coverage."
+          ],
+          [
+            "Standardize non-Yearbook",
+            "Fill missing and replace automatic sources while protecting custom images and existing Yearbook thumbnails."
+          ],
+          [
+            "Replacement options",
+            "Read the selected thumbnail action before starting a broader overwrite."
+          ],
+          [
+            "Incremental / ordered / shuffled",
+            "Use recognized epoch/checkpoint families in numeric low-to-high progression, preserve filtered view order, or shuffle."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Watch the run in Theater",
+        "body": "Follow each newly completed image or freeze on a checkpoint worth reviewing. Favorite, Like/Keep, Retest and Reject write the LoRA’s real review state. Closing Theater leaves Yearbook running."
+      },
+      {
+        "type": "callout",
+        "title": "Scope is the safety rail",
+        "body": "Yearbook waits for earlier queue work before capture. Original Loader, Prompt, Generation and Output values return at the end. Start with a small family to verify your comparison settings and output path before a long run."
+      }
+    ],
+    "layer": "LORA LIBRARY"
+  },
+  {
+    "id": "outfits",
+    "title": "From piece to complete Look",
+    "deck": "Wardrobe Piece → Outfit Builder → Outfit Look → Prompt Core",
+    "blocks": [
+      {
+        "type": "pair",
+        "left": [
+          "WARDROBE",
+          "Reusable pieces, sets and styling material. Keep garment identity here; vary its attributes in Builder."
+        ],
+        "right": [
+          "LOOK",
+          "A complete outfit value. Save a finished assembly here when you want to load the same combination again."
+        ]
+      },
+      {
+        "type": "table",
+        "title": "Per-piece Builder attributes",
+        "rows": [
+          [
+            "Color / Pattern",
+            "Choose color and surface pattern independently."
+          ],
+          [
+            "Cut / Fit / Material",
+            "Refine silhouette and construction substance."
+          ],
+          [
+            "Wear",
+            "Add condition or wear details."
+          ],
+          [
+            "Graphic / Text",
+            "Add graphic wording, including portable NAME or BRAND placeholders where needed."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Build or load directly",
+        "body": "Add pieces, tune their inline/custom values, reorder them and copy, load or save the resulting outfit. Direct Wardrobe Load A/B/C sets a Manual Outfit value. Loading a Look switches that slot back to its managed Prompt Log source behavior."
+      },
+      {
+        "type": "callout",
+        "title": "Collections are live sources",
+        "body": "Wardrobe Collections and Look Collections can both supply Outfit A/B/C pools. Scene Collections supply Scene. Fixed, Increment, Decrement, Randomize and Shuffle use the selected Collection members without making duplicate TXT master logs; renaming the Collection keeps its stable source identity."
+      }
+    ],
+    "layer": "OUTFITS"
+  },
+  {
+    "id": "forge",
+    "title": "Forge a log, then curate it",
+    "deck": "Outfit Forge is an optional local beta tool for complete Looks.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Start with a concrete brief",
+        "body": "Open Studio Hub → Outfit Forge. Enter Theme, then choose Line count, Seed, Coverage, Complexity and Wearability. Inspect Understood and Not represented. Recognized garments, colors and materials constrain generation; the beta interpreter cannot represent every concept."
+      },
+      {
+        "type": "table",
+        "title": "A useful working sequence",
+        "rows": [
+          [
+            "Forge Outfit Log",
+            "Build a deterministic log from the full brief and seed. New Seed explores a different set."
+          ],
+          [
+            "Edit and reforge",
+            "Edit one line, duplicate it, remove it or regenerate only that entry. Search filters the draft."
+          ],
+          [
+            "Audit",
+            "Constraint Fidelity checks enforced constraints. Brief Coverage identifies unrepresented terms. Structural checks flag repetition and duplicates."
+          ],
+          [
+            "Publish",
+            "Copy, Download .TXT, or Export to Outfit Looks into a category/subcategory."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Optional refinements",
+        "body": "Advanced controls add Required, Avoid and vocabulary banks. Theme constraints take precedence over optional banks. Coverage changes exposure/layering; Complexity changes detail density; Wearability 1–2 permits experimental construction, while 3–5 stays more plausible."
+      },
+      {
+        "type": "callout",
+        "title": "Know what is saved",
+        "body": "Drafts and edits autosave in this browser. Download or publish a result you want to keep across browsers. Forge uses local structured generation rather than an external language model. Its published outputs are complete Looks, not Wardrobe Pieces."
+      }
+    ],
+    "layer": "OUTFITS"
+  },
+  {
+    "id": "triggers",
+    "title": "Resolve once. Place deliberately.",
+    "deck": "Loader chooses the phrase; Prompt Core chooses its position.",
+    "blocks": [
+      {
+        "type": "trigger-map"
+      },
+      {
+        "type": "text",
+        "title": "Persistent override scopes",
+        "body": "Use the Loader trigger pencil and choose THIS LoRA ONLY or MATCHING EPOCH FAMILY. A safe family changes only the numeric token after epoch/ep; the remaining filename and parent folder must match, case-insensitively. New matching epoch files inherit that family rule."
+      },
+      {
+        "type": "text",
+        "title": "Automatic fallback",
+        "body": "Without an override, Loader tries explicit embedded activation metadata, then training-tag evidence, then Civitai sidecar / exact-hash fallback. It rejects model titles as activation phrases and does not auto-inject an unsafe long or weighted Civitai recipe."
+      },
+      {
+        "type": "text",
+        "title": "Place it in Prompt Core",
+        "body": "Connect Main trigger and open the TRIGGER assembly chip. Auto replaces TRIGGER or prepends when absent. Placeholder only replaces an existing token. Beginning/End removes token occurrences and inserts at that edge. Off removes the token and inserts nothing. The default placement is Off."
+      },
+      {
+        "type": "callout",
+        "title": "Follow the model as it changes",
+        "body": "Prompt Core can save or clear the active LoRA override. A local pin is scoped to its LoRA so it does not follow an unrelated model. Disabled or zero-strength Main LoRA output is suppressed; manually baked trigger text remains ordinary prompt text. Secondary phrases require their own deliberate placement."
+      }
+    ],
+    "layer": "ADVANCED / REFERENCE"
+  },
+  {
+    "id": "advanced",
+    "title": "Use the extra sockets when needed",
+    "deck": "Extend the Studio workflow without losing track of what overrides what.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "External conditioning",
+        "body": "Generation Core accepts optional positive_conditioning and negative_conditioning. Connected positive conditioning overrides its internal positive-text encoding; an unconnected negative uses the normal empty fallback. The Conditioning status rows report which path is active. Use compatible external conditioning for the model and workflow you are building."
+      },
+      {
+        "type": "text",
+        "title": "CLIP type and device",
+        "body": "Advanced reveals CLIP type and device selection. The correct encoder family depends on the installed model. The node’s initial settings are not universal generation defaults."
+      },
+      {
+        "type": "table",
+        "title": "Library-recognized portable tokens",
+        "rows": [
+          [
+            "Primary",
+            "NAME · OUTFIT · OUTFIT_A · OUTFIT_B · OUTFIT_C · BRAND · ITEM · SCENE · TRIGGER"
+          ],
+          [
+            "Additional portable vocabulary",
+            "LOCATION · RARE_EVENT · LIGHT_SOURCE · ANALOG_CAPTURE_STYLE · PRACTICAL_OUTER_LAYER · SMALL_STYLING_DETAILS · NATURAL_SURFACE"
+          ]
+        ]
+      },
+      {
+        "type": "callout",
+        "title": "Recognition vs resolution",
+        "body": "Creative Library uses recognized token presence to classify Templates. Prompt Core resolves its configured component, name, item and trigger slots. Additional portable vocabulary needs deliberate editing or slot configuration; the Library does not invent missing values. Use exact case and inspect the resolved prompt."
+      }
+    ],
+    "layer": "ADVANCED / REFERENCE"
+  },
+  {
+    "id": "organizer",
+    "title": "Change files with a reviewed plan",
+    "deck": "LoRA Organizer is the filesystem tool, separate from LoRA Library.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Scan → review → apply",
+        "body": "Choose the LoRA library root, set naming and Base / Category / Creator organization rules, then Scan Folder. Inspect proposed names and destinations. Select only intended Ready items and use Apply Selected. Scanning itself does not move files; Stop Scan cancels planning."
+      },
+      {
+        "type": "text",
+        "title": "Keep model families together",
+        "body": "The organizer handles related sidecars, bounds mutation paths to the selected root and avoids clobbering destination files. Reprocess existing subfolders is a deliberate option for reorganizing an existing layout; start from the real root rather than a nested organized category."
+      },
+      {
+        "type": "pair",
+        "left": [
+          "DUPLICATES / ORPHANS",
+          "Find Exact Duplicates uses exact identity checks. Find Orphans / Empty Folders proposes cleanup. Review the selected files before confirming OS Trash / Recycle Bin operations."
+        ],
+        "right": [
+          "UNDO LAST",
+          "Operation manifests support undo for applicable changes. OS Trash recovery belongs to the operating system; undo and recoverable Trash are not substitutes for a separate backup."
+        ]
+      },
+      {
+        "type": "callout",
+        "title": "Other controls",
+        "body": "Browse chooses a root; Copy Info and Open Civitai help inspect the selected record. Settings controls organizer preferences and optional online lookup credentials. A cancelled scan publishes no partial mutation plan. Do not treat Library Purge as filesystem organization."
+      }
+    ],
+    "layer": "ADVANCED / REFERENCE"
+  },
+  {
+    "id": "maintenance",
+    "title": "Clean the intended thing",
+    "deck": "Use disposable test data when learning destructive maintenance.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Maintenance choices",
+        "rows": [
+          [
+            "Delete Thumbnail",
+            "Remove an asset’s preview while retaining its reusable text record."
+          ],
+          [
+            "Delete Asset",
+            "Remove or archive a Library record according to its type; inspect the confirmation."
+          ],
+          [
+            "Clean Orphan Thumbnails",
+            "Run a reference scan and review files that no live Library record uses."
+          ],
+          [
+            "Creative Library Purge",
+            "Choose sections or the entire Library; read the itemized warning and typed confirmation."
+          ],
+          [
+            "LoRA catalog maintenance",
+            "Clearing thumbnails affects caches. Purge + rebuild resets the selected LoRA index/review/history data and rescans files; it does not delete LoRA weights."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Back up the right scope",
+        "body": "Export a Library Pack for portable creative assets. For installation-level recovery, also copy the user-data directory, input logs and any model files you plan to reorganize. A pack is not a complete filesystem backup."
+      },
+      {
+        "type": "callout",
+        "title": "Legacy recoverability",
+        "body": "Retired Workshop data remains recoverable until explicitly purged. Deleting a Collection removes membership, not its assets. The Organizer is the separate tool for confirmed model-file moves and cleanup."
+      }
+    ],
+    "layer": "ADVANCED / REFERENCE"
+  },
+  {
+    "id": "storage",
+    "title": "Know where your work lives",
+    "deck": "Normal extension replacement should leave user-owned content intact.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Default locations",
+        "rows": [
+          [
+            "Extension",
+            "ComfyUI/custom_nodes/ComfyUI-SickOllie/"
+          ],
+          [
+            "Catalog and user data",
+            "ComfyUI/user/SickOllie/; the catalog is solo_catalog.sqlite3. Actual user root follows ComfyUI configuration."
+          ],
+          [
+            "Creative previews",
+            "creative_library_previews/ beside the catalog. Compatible older preview folders are migrated conservatively."
+          ],
+          [
+            "Prompt / component logs",
+            "ComfyUI/input/SickOllieLogs/ with prompts/, outfits/ and scenes/ categories. Generated Library logs use Creative Library subfolders."
+          ],
+          [
+            "Generated images",
+            "ComfyUI/output/ beneath the Output Core path or dedicated Yearbook run roots."
+          ],
+          [
+            "Forge drafts / UI preferences",
+            "Browser local storage; export important drafts for portability."
+          ]
+        ]
+      },
+      {
+        "type": "text",
+        "title": "Migration boundaries",
+        "body": "Old generated Recipe Library log references map to canonical Creative Library references. Managed preview files move to the canonical store when safe; unknown or conflicting files are preserved. Internal schema numbers and compatibility identifiers are independent of the v4 product version."
+      },
+      {
+        "type": "callout",
+        "title": "Nonstandard installations",
+        "body": "The backend follows ComfyUI’s configured user and input directories. If no user directory is available, the catalog code has an extension-local data fallback. Inspect the actual installation path before replacing a folder; never discard a data folder just because it is beside code."
+      }
+    ],
+    "layer": "ADVANCED / REFERENCE"
+  },
+  {
+    "id": "compatibility",
+    "title": "Upgrade the product, keep your work",
+    "deck": "v4 keeps deliberate compatibility while giving new users one clear starting point.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Studio and Classic",
+        "body": "Build a current Studio graph using the map near the beginning of this manual, or open your existing workflow. v4 includes no bundled sample workflows, starter logs or old manuals. Classic node IDs remain registered, and legacy Preview nodes migrate to Studio Preview through compatibility handling."
+      },
+      {
+        "type": "text",
+        "title": "Retained maintenance compatibility",
+        "body": "Older workflows containing Log Organizer can still open. That legacy tool is not promoted in the primary Studio Hub. Its historical name and internal engine versions are compatibility identifiers, not the v4 public release label."
+      },
+      {
+        "type": "text",
+        "title": "The current product language",
+        "body": "Use Templates, Prompts, Outfits and Scenes; Home and Collection; Generate Previews in Creative Library; Yearbook in LoRA Library; and Library Pack for .soslibrary. Saved Generation Recipes remain available behind reuse. Separate Wardrobe Pack and Workshop-first navigation are retired."
+      },
+      {
+        "type": "callout",
+        "title": "Before updating",
+        "body": "Back up ComfyUI user data and SickOllieLogs. Close ComfyUI, replace only the extension folder, restart fully and hard-refresh the frontend. Open a copied workflow first, reselect missing local files and verify one generation before continuing production."
+      }
+    ],
+    "layer": "ADVANCED / REFERENCE"
+  },
+  {
+    "id": "troubleshooting",
+    "title": "When something feels wrong",
+    "deck": "Check the selected source and active scope before rebuilding anything.",
+    "blocks": [
+      {
+        "type": "table",
+        "title": "Symptom → first check",
+        "rows": [
+          [
+            "Typing stops or a modal seems hidden",
+            "Close the active dialog and refocus its field. The Studio focus guard addresses stale canvas capture; if it recurs, record the dialog, steps and console error."
+          ],
+          [
+            "Manual text is not used",
+            "Check Prompt Source. Prompt Input and Prompt Log are separate choices."
+          ],
+          [
+            "Outfit / Scene does not change",
+            "Check Manual vs log source, placement, token spelling and the stream’s After Generate mode."
+          ],
+          [
+            "Unexpected trigger words",
+            "Check Loader override scope, Prompt Trigger placement and trigger text already baked into the source."
+          ],
+          [
+            "Missing preview / older detail",
+            "Open View, inspect available metadata and regenerate from a larger source if appropriate."
+          ],
+          [
+            "Collection not available / wrong results",
+            "Confirm the asset type, active scope and actual members; reopen the relevant source browser after editing."
+          ],
+          [
+            "Loader UI does not initialize",
+            "Confirm rgthree-comfy is installed, restart ComfyUI and hard-refresh."
+          ],
+          [
+            "Unexpected metadata image",
+            "Check the optional IMAGE connection; a connected image source takes priority."
+          ]
+        ]
+      },
+      {
+        "type": "callout",
+        "title": "A useful bug report",
+        "body": "Include Toolkit version 4.0.0, ComfyUI version, the node or Library area, exact reproduction steps, console traceback and a minimal workflow without private data. Separate an automated-test result from what happened in your Desktop session."
+      }
+    ],
+    "layer": "ADVANCED / REFERENCE"
+  },
+  {
+    "id": "install",
+    "title": "Install, import, make something",
+    "deck": "A clean starting point for new users and returning v3 users.",
+    "blocks": [
+      {
+        "type": "text",
+        "title": "Install v4",
+        "body": "Use a compatible ComfyUI installation with the LiteGraph canvas and Python 3.10+. Install rgthree-comfy for Loader’s shared model-information services. Place the single ComfyUI-SickOllie folder in custom_nodes, avoiding a double-nested folder. Restart ComfyUI, then hard-refresh the browser."
+      },
+      {
+        "type": "text",
+        "title": "Choose your local model files",
+        "body": "Build the five-Core graph shown in this manual, select Diffusion model and compatible encoder/VAE files, and inspect the model-specific sampling settings. The package does not bundle generation model weights."
+      },
+      {
+        "type": "text",
+        "title": "Import your Library content",
+        "body": "This release ships with an empty Library and no bundled starter content. When you have a separately supplied .soslibrary pack, open Studio Hub → Creative Library → Library Menu → Library Pack → Import Library Pack and inspect its contents. Install selected sections and thumbnails deliberately. You can also import your own TXT logs. Updates do not silently replace your Library."
+      },
+      {
+        "type": "callout",
+        "title": "Your next useful experiment",
+        "body": "Load a Template, choose one Outfit and one Scene, fix the seed and generate. Pin + Compare, change one component and generate again. Save the stronger result. You have completed the whole Studio loop."
+      }
+    ],
+    "layer": "START / UPDATE"
+  }
+]

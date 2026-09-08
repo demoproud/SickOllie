@@ -5,6 +5,7 @@ import os
 import re
 import json
 import struct
+import hashlib
 import torch
 from collections import OrderedDict
 from typing import Any
@@ -18,7 +19,8 @@ from .civitai_trigger import (
     detect_civitai_triggers,
     normalize_trigger_text as _normalize_civitai_trigger_text,
 )
-from .trigger_resolution import choose_automatic, classify_candidate
+from .trigger_resolution import choose_automatic, classify_candidate, epoch_family_signature, matching_epoch_family
+from .solo_catalog import SoloCatalog
 
 try:
     from aiohttp import web
@@ -60,6 +62,7 @@ ALL_FOLDERS = "[All LoRA folders]"
 ROOT_FOLDER = "[LoRA root only]"
 FAVORITES_FOLDER = "[★ Favorites]"
 UNTESTED_FOLDER = "[◌ Untested / Retest]"
+COLLECTION_SCOPE_PREFIX = "[LoRA Collection:"
 ALL_EPOCHS = "[All epochs]"
 NO_EPOCH_TAG = "[No epoch tag]"
 ALL_LIBRARY_STATES = "[All Library statuses]"
@@ -79,6 +82,172 @@ LEGACY_DEFAULT_CLEANUP_RULES = r"""(?i)_\d+$
 (?i)_sickollie$
 (?i)_krea2$
 (?i)_epoch$"""
+
+_TRIGGER_CATALOG: SoloCatalog | None = None
+
+def _trigger_catalog() -> SoloCatalog:
+    global _TRIGGER_CATALOG
+    if _TRIGGER_CATALOG is None:
+        _TRIGGER_CATALOG = SoloCatalog()
+    return _TRIGGER_CATALOG
+
+def _sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(4 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+def _existing_trigger_asset_id(full_path: str) -> str | None:
+    try:
+        return _trigger_catalog().asset_id_for_path(full_path)
+    except Exception:
+        return None
+
+def _exact_trigger_override(lora_name: str) -> tuple[str, str]:
+    selected = str(lora_name or NO_LORA)
+    if not selected or selected == NO_LORA:
+        return "", ""
+    try:
+        full_path = folder_paths.get_full_path_or_raise("loras", selected)
+    except Exception:
+        return "", ""
+    asset_id = _existing_trigger_asset_id(full_path)
+    if not asset_id:
+        return "", ""
+    try:
+        pinned = _trigger_catalog().pinned_trigger(asset_id)
+    except Exception:
+        pinned = None
+    if not pinned:
+        return "", ""
+    value = _normalize_civitai_trigger_text(pinned.get("raw_text"))
+    return (value, str(pinned.get("source") or "user.override")) if value else ("", "")
+
+
+def _family_trigger_override(lora_name: str) -> tuple[str, str]:
+    signature = epoch_family_signature(lora_name)
+    if not signature:
+        return "", ""
+    try:
+        rule = _trigger_catalog().trigger_family_override(
+            signature["folder_key"], signature["family_key"]
+        )
+    except Exception:
+        rule = None
+    if not rule:
+        return "", ""
+    value = _normalize_civitai_trigger_text(rule.get("raw_text"))
+    return (value, str(rule.get("source") or "user.family_override")) if value else ("", "")
+
+
+def _saved_trigger_override(lora_name: str) -> tuple[str, str]:
+    exact = _exact_trigger_override(lora_name)
+    if exact[0]:
+        return exact
+    return _family_trigger_override(lora_name)
+
+
+def _save_trigger_override(lora_name: str, trigger: str) -> tuple[str, str]:
+    selected = str(lora_name or NO_LORA)
+    value = _normalize_civitai_trigger_text(trigger)
+    if not selected or selected == NO_LORA:
+        raise ValueError("Select a LoRA before saving a custom trigger.")
+    if not value:
+        raise ValueError("Custom trigger cannot be empty.")
+    if len(value) > 4096:
+        raise ValueError("Custom trigger is too long.")
+    full_path = folder_paths.get_full_path_or_raise("loras", selected)
+    catalog = _trigger_catalog()
+    asset_id = catalog.asset_id_for_path(full_path)
+    if not asset_id:
+        sha256 = _sha256_file(full_path)
+        asset_id = f"sha256:{sha256}"
+        catalog.upsert_asset(
+            asset_id=asset_id,
+            path=full_path,
+            sha256=sha256,
+            size=os.path.getsize(full_path),
+            model_name=os.path.splitext(os.path.basename(full_path))[0],
+            reason="trigger override",
+        )
+    catalog.pin_trigger(asset_id, value, "user.override")
+    return value, "user.override"
+
+def _clear_trigger_override(lora_name: str) -> bool:
+    selected = str(lora_name or NO_LORA)
+    if not selected or selected == NO_LORA:
+        return False
+    try:
+        full_path = folder_paths.get_full_path_or_raise("loras", selected)
+    except Exception:
+        return False
+    asset_id = _existing_trigger_asset_id(full_path)
+    if not asset_id:
+        return False
+    try:
+        _trigger_catalog().clear_pinned_trigger(asset_id)
+        return True
+    except Exception:
+        return False
+
+
+def _save_trigger_family_override(lora_name: str, trigger: str) -> tuple[str, str]:
+    selected = str(lora_name or NO_LORA)
+    value = _normalize_civitai_trigger_text(trigger)
+    if not selected or selected == NO_LORA:
+        raise ValueError("Select a LoRA before saving a family trigger.")
+    if not value:
+        raise ValueError("Custom trigger cannot be empty.")
+    if len(value) > 4096:
+        raise ValueError("Custom trigger is too long.")
+    signature = epoch_family_signature(selected)
+    if not signature:
+        raise ValueError("This filename does not contain an epoch number to build a family rule from.")
+    _trigger_catalog().pin_trigger_family(
+        signature["folder_key"],
+        signature["family_key"],
+        value,
+        "user.family_override",
+    )
+    return value, "user.family_override"
+
+
+def _clear_trigger_family_override(lora_name: str) -> bool:
+    signature = epoch_family_signature(lora_name)
+    if not signature:
+        return False
+    try:
+        return _trigger_catalog().clear_trigger_family(
+            signature["folder_key"], signature["family_key"]
+        )
+    except Exception:
+        return False
+
+
+def _trigger_family_state(lora_name: str) -> dict[str, Any]:
+    signature = epoch_family_signature(lora_name)
+    if not signature:
+        return {
+            "available": False,
+            "pattern": "",
+            "folder": "",
+            "count": 0,
+            "members": [],
+            "override": "",
+            "source": "",
+        }
+    members = matching_epoch_family(lora_name, _all_lora_names())
+    override, source = _family_trigger_override(lora_name)
+    return {
+        "available": len(members) > 1,
+        "pattern": signature["pattern"],
+        "folder": signature["folder"],
+        "count": len(members),
+        "members": members,
+        "override": override,
+        "source": source,
+    }
 
 
 def _normalize_path(value: str) -> str:
@@ -104,6 +273,29 @@ def _leaf_folder_name(lora_name: str) -> str:
     return parent.rsplit("/", 1)[-1]
 
 
+def _collection_scope_value(collection_id: str) -> str:
+    return f"{COLLECTION_SCOPE_PREFIX}{str(collection_id or '').strip()}]"
+
+
+def _collection_scope_id(value: str) -> str:
+    text = str(value or "").strip()
+    if not text.startswith(COLLECTION_SCOPE_PREFIX) or not text.endswith("]"):
+        return ""
+    return text[len(COLLECTION_SCOPE_PREFIX):-1].strip()
+
+
+def _lora_collection_choices() -> list[str]:
+    try:
+        collections = _trigger_catalog().lora_collections()
+    except Exception:
+        return []
+    return [
+        _collection_scope_value(collection.get("collection_id", ""))
+        for collection in collections
+        if str(collection.get("collection_id") or "").strip()
+    ]
+
+
 def _folder_choices() -> list[str]:
     folders: set[str] = set()
 
@@ -116,7 +308,7 @@ def _folder_choices() -> list[str]:
         for index in range(1, len(parts) + 1):
             folders.add("/".join(parts[:index]))
 
-    return [ALL_FOLDERS, ROOT_FOLDER, FAVORITES_FOLDER, UNTESTED_FOLDER] + sorted(folders, key=lambda value: value.lower())
+    return _lora_collection_choices() + [ALL_FOLDERS, ROOT_FOLDER, FAVORITES_FOLDER, UNTESTED_FOLDER] + sorted(folders, key=lambda value: value.lower())
 
 
 def _main_lora_choices() -> list[str]:
@@ -194,6 +386,42 @@ def _matches_folder(lora_name: str, folder_name: str, include_subfolders: bool) 
     return parent == selected
 
 
+def _collection_loras(folder_name: str) -> list[str]:
+    collection_id = _collection_scope_id(folder_name)
+    if not collection_id:
+        return []
+    try:
+        catalog = _trigger_catalog()
+        collection = next(
+            (item for item in catalog.lora_collections() if str(item.get("collection_id") or "") == collection_id),
+            None,
+        )
+        if not collection:
+            return []
+        member_ids = {str(value) for value in (collection.get("asset_ids") or []) if str(value)}
+        if not member_ids:
+            return []
+
+        path_to_name: dict[str, str] = {}
+        getter = getattr(folder_paths, "get_full_path", None)
+        if not callable(getter):
+            return []
+        for name in _all_lora_names():
+            full_path = getter("loras", name)
+            if full_path:
+                path_to_name[os.path.abspath(str(full_path))] = name
+
+        names: list[str] = []
+        for asset in catalog.list_assets():
+            if str(asset.get("asset_id") or "") not in member_ids:
+                continue
+            lora_name = path_to_name.get(os.path.abspath(str(asset.get("current_path") or "")))
+            if lora_name:
+                names.append(lora_name)
+        return list(dict.fromkeys(names))
+    except Exception:
+        return []
+
 def _library_annotations() -> dict[str, dict[str, Any]]:
     try:
         from .solo_catalog import get_catalog
@@ -232,10 +460,13 @@ def _folder_loras(
     elif folder_name == UNTESTED_FOLDER:
         legacy_filter = UNTESTED_FILTER
 
-    names = [
-        name for name in _all_lora_names()
-        if _matches_folder(name, folder_name, include_subfolders)
-    ]
+    if _collection_scope_id(folder_name):
+        names = _collection_loras(folder_name)
+    else:
+        names = [
+            name for name in _all_lora_names()
+            if _matches_folder(name, folder_name, include_subfolders)
+        ]
     annotations = _library_annotations()
     if legacy_filter == FAVORITES_FILTER:
         names = [name for name in names if _lora_annotation(name, annotations)["state"] == "favorite"]
@@ -686,7 +917,7 @@ def _trigger_from_modelspec_title(metadata: dict[str, Any]) -> tuple[str, str]:
     return "", ""
 
 
-def _detect_main_trigger(lora_name: str) -> tuple[str, str]:
+def _detect_automatic_trigger(lora_name: str) -> tuple[str, str]:
     selected = str(lora_name or NO_LORA)
     if not selected or selected == NO_LORA:
         return "", ""
@@ -721,6 +952,13 @@ def _detect_main_trigger(lora_name: str) -> tuple[str, str]:
     return "", ""
 
 
+def _detect_main_trigger(lora_name: str) -> tuple[str, str]:
+    override, source = _saved_trigger_override(lora_name)
+    if override:
+        return override, source or "user.override"
+    return _detect_automatic_trigger(lora_name)
+
+
 def _trigger_candidates(lora_name: str) -> list[dict[str, Any]]:
     """Expose trigger evidence without confusing model titles for triggers."""
 
@@ -734,6 +972,9 @@ def _trigger_candidates(lora_name: str) -> list[dict[str, Any]]:
 
     metadata = _load_safetensors_metadata(full_path)
     candidates: list[dict[str, Any]] = []
+    # Saved overrides are the active Loader Core value, not detection evidence.
+    # Keep this list limited to provenance candidates so Trigger Setup never
+    # presents a user's chosen override as something the model "detected".
     for resolver in (_trigger_from_explicit_metadata, _trigger_from_ss_tag_frequency):
         trigger, source = resolver(metadata)
         if trigger:
@@ -775,15 +1016,74 @@ if PromptServer is not None and web is not None:
             }
         )
 
+    @PromptServer.instance.routes.get("/sickollie/studio/loader-core/trigger-override")
+    async def so_loader_core_trigger_override_get(request):
+        lora_name = request.rel_url.query.get("lora", "")
+        exact, exact_source = await asyncio.to_thread(_exact_trigger_override, lora_name)
+        family = await asyncio.to_thread(_trigger_family_state, lora_name)
+        effective, effective_source = await asyncio.to_thread(_saved_trigger_override, lora_name)
+        automatic, automatic_source = await asyncio.to_thread(_detect_automatic_trigger, lora_name)
+        return web.json_response({
+            "ok": True,
+            # Backwards-compatible fields now expose the effective saved override.
+            "override": str(effective),
+            "source": str(effective_source),
+            "exact_override": str(exact),
+            "exact_source": str(exact_source),
+            "family_override": str(family.get("override") or ""),
+            "family_source": str(family.get("source") or ""),
+            "family_available": bool(family.get("available")),
+            "family_pattern": str(family.get("pattern") or ""),
+            "family_folder": str(family.get("folder") or ""),
+            "family_count": int(family.get("count") or 0),
+            "family_members": list(family.get("members") or []),
+            "automatic": str(automatic),
+            "automatic_source": str(automatic_source),
+        })
+
+    @PromptServer.instance.routes.post("/sickollie/studio/loader-core/trigger-override")
+    async def so_loader_core_trigger_override_set(request):
+        try:
+            payload = await request.json()
+            lora_name = str(payload.get("lora") or "")
+            trigger = str(payload.get("trigger") or "")
+            scope = str(payload.get("scope") or "lora").strip().lower()
+            if scope == "family":
+                value, source = await asyncio.to_thread(_save_trigger_family_override, lora_name, trigger)
+            else:
+                value, source = await asyncio.to_thread(_save_trigger_override, lora_name, trigger)
+            return web.json_response({"ok": True, "trigger": value, "source": source, "scope": scope})
+        except Exception as error:
+            return web.json_response({"ok": False, "error": str(error)}, status=400)
+
+    @PromptServer.instance.routes.delete("/sickollie/studio/loader-core/trigger-override")
+    async def so_loader_core_trigger_override_clear(request):
+        lora_name = request.rel_url.query.get("lora", "")
+        scope = str(request.rel_url.query.get("scope", "lora") or "lora").strip().lower()
+        if scope == "family":
+            cleared = await asyncio.to_thread(_clear_trigger_family_override, lora_name)
+        else:
+            cleared = await asyncio.to_thread(_clear_trigger_override, lora_name)
+        return web.json_response({"ok": True, "cleared": bool(cleared), "scope": scope})
+
     @PromptServer.instance.routes.get("/sickollie/studio/loader-core/trigger-candidates")
     async def so_loader_core_trigger_candidates(request):
         lora_name = request.rel_url.query.get("lora", "")
         candidates = await asyncio.to_thread(_trigger_candidates, lora_name)
-        selected = choose_automatic(candidates)
+        active, active_source = await asyncio.to_thread(_detect_main_trigger, lora_name)
+        selected = ({
+            "raw": active,
+            "clean": active,
+            "suggested": active,
+            "source": active_source,
+            "auto_select": True,
+            "pinned": str(active_source).startswith("user."),
+        } if active else {})
         return web.json_response(
             {
                 "ok": True,
                 "candidates": candidates,
+                "active": selected or {},
                 "automatic": selected or {},
             }
         )
@@ -1282,8 +1582,8 @@ class FolderBatchLoraStackModelOnly:
 
 class LoaderCoreEngine(FolderBatchLoraStackModelOnly):
     """
-    Diffusion-model loader, folder-cycling primary LoRA, and a dynamic
-    rgthree-style secondary LoRA stack.
+    Diffusion-model loader, folder-cycling primary LoRA, and a Studio
+    folder-browser secondary LoRA stack.
     """
 
     def __init__(self):
@@ -1422,13 +1722,34 @@ class LoaderCoreEngine(FolderBatchLoraStackModelOnly):
                     "tooltip": "Sort the active folder pool by name or durable Library usage history.",
                 },
             ),
+            "diffusion_control_after_generate": (
+                CONTROL_MODES,
+                {
+                    "default": "fixed",
+                    "tooltip": "Choose how the diffusion model selector changes after each queued generation.",
+                },
+            ),
         }
 
         return {
             "required": required,
             "optional": _FlexibleOptionalInputType(
                 _ANY_TYPE,
-                data={},
+                data={
+                    # The Studio dashboard owns this value visually, but it is
+                    # declared here so ComfyUI includes it in the execution
+                    # prompt.  Keeping it as JSON text avoids exposing a native
+                    # complex-value widget while preserving arbitrary legacy
+                    # secondary_lora_N optional inputs.
+                    "secondary_lora_stack": (
+                        "STRING",
+                        {
+                            "default": "[]",
+                            "multiline": False,
+                            "dynamicPrompts": False,
+                        },
+                    ),
+                },
             ),
             "hidden": {
                 "prompt": "PROMPT",
@@ -1453,7 +1774,7 @@ class LoaderCoreEngine(FolderBatchLoraStackModelOnly):
     CATEGORY = "Sick Ollie/Studio"
     DESCRIPTION = (
         "Loads a diffusion model, applies a folder-cycling primary LoRA, "
-        "then applies a dynamic rgthree-powered secondary LoRA stack."
+        "then applies a fixed secondary LoRA stack selected with the Studio folder browser."
     )
     SEARCH_ALIASES = [
         "loader core",
@@ -1501,13 +1822,37 @@ class LoaderCoreEngine(FolderBatchLoraStackModelOnly):
     def _dynamic_secondary_values(kwargs):
         values = []
 
+        # Current Studio UI sends one compact stack value. Older test builds
+        # sent one dynamic custom widget per secondary LoRA, so keep accepting
+        # both shapes for workflow compatibility.
+        stack = kwargs.get("secondary_lora_stack")
+        if isinstance(stack, str):
+            try:
+                decoded = json.loads(stack)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                decoded = None
+            if isinstance(decoded, list):
+                stack = decoded
+
+        if isinstance(stack, list):
+            for index, value in enumerate(stack[:10], start=1):
+                if not isinstance(value, dict):
+                    continue
+                values.append(
+                    (
+                        f"secondary_lora_{index}",
+                        bool(value.get("on", True)),
+                        str(value.get("lora") or NO_LORA),
+                        float(value.get("strength", 1.0)),
+                    )
+                )
+            return values
+
         for key, value in kwargs.items():
             if not str(key).startswith("secondary_lora_"):
                 continue
-
             if not isinstance(value, dict):
                 continue
-
             values.append(
                 (
                     str(key),
@@ -1542,6 +1887,7 @@ class LoaderCoreEngine(FolderBatchLoraStackModelOnly):
         cleanup_rules: str,
         library_filter: str = ALL_LIBRARY_STATES,
         lora_sort: str = SORT_NAME,
+        diffusion_control_after_generate: str = "fixed",
         prompt=None,
         extra_pnginfo=None,
         unique_id=None,
@@ -1675,6 +2021,30 @@ class LoaderCoreEngine(FolderBatchLoraStackModelOnly):
             extra["so_loader_core_main_folder"] = str(main_folder)
             extra["so_loader_core_secondary_loras"] = list(secondary_applied)
 
+        live_loras: list[dict[str, Any]] = []
+        if main_active:
+            live_loras.append({
+                "role": "main",
+                "file": str(selected_main),
+                "strength": float(main_strength),
+            })
+        for item in secondary_applied:
+            live_loras.append({
+                "role": "secondary",
+                "file": str(item.get("file") or ""),
+                "strength": float(item.get("strength", 1.0)),
+                "slot": str(item.get("slot") or ""),
+            })
+        live_payload = {
+            "loader_node": str(unique_id or ""),
+            "diffusion_model": diffusion_model_file,
+            "loras": live_loras,
+        }
+        if PromptServer is not None:
+            try:
+                PromptServer.instance.send_sync("sickollie_active_loras", live_payload)
+            except Exception:
+                pass
         return (
             current_model,
             clean_name,

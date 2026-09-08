@@ -17,23 +17,12 @@ class PackRegistrationTests(unittest.TestCase):
         self.assertIn("ORGANIZER_CLASSES", source)
         self.assertIn("solo_lora_organizer", source)
         self.assertIn("solo_log_organizer", source)
+        self.assertIn("solo_outfit_forge", source)
 
-    def test_starter_workflows_use_only_the_remaining_preview_metadata_families(self) -> None:
-        workflows = ROOT / "Starter Content" / "workflows"
-        classic = json.loads((workflows / "Sick Nodes v2_Classic.json").read_text(encoding="utf-8"))
-        studio = json.loads((workflows / "Sick Nodes v2_Studio.json").read_text(encoding="utf-8"))
-        generic = json.loads((workflows / "SickOllie_NodePack.json").read_text(encoding="utf-8"))
-        classic_types = {node.get("type") for node in classic.get("nodes", [])}
-        studio_types = {node.get("type") for node in studio.get("nodes", [])}
-        generic_types = {node.get("type") for node in generic.get("nodes", [])}
-
-        self.assertNotIn("SOFitPreview", classic_types)
-        self.assertIn("SOFitPreviewStudio", studio_types)
-        self.assertIn("SOImageMetadataCoreStudio", studio_types)
-        self.assertNotIn("PersistentResolvedPromptSOStudio", studio_types)
-        self.assertEqual(studio_types, generic_types)
-        self.assertIn("SOFitPreviewStudio", generic_types)
-        self.assertNotIn("SOFitPreview", generic_types)
+    def test_release_contains_no_sample_workflows_or_starter_payload(self) -> None:
+        self.assertFalse((ROOT / "Starter Content").exists())
+        self.assertFalse((ROOT / "starter_content").exists())
+        self.assertEqual(list(ROOT.rglob("*.soslibrary")), [])
 
 
 if __name__ == "__main__":

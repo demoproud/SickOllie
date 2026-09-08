@@ -666,6 +666,9 @@ function installDashboard(node) {
 
 app.registerExtension({
     name: "SickOllie.Studio.OutputCore",
+    setup() {
+        ensurePointerTracker();
+    },
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== TARGET) return;
 

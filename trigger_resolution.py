@@ -18,6 +18,66 @@ _WEIGHT_SUFFIX = re.compile(r"\s*:\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)\s*$")
 _OUTER_WRAPPERS = re.compile(r"^[\s\[\](){}]+|[\s\[\](){}]+$")
 
 
+
+_EPOCH_FAMILY_TOKEN = re.compile(
+    r"(?i)(?P<marker>(?:^|[_\-. ])(?:epoch|ep)[_\-. ]*)(?P<number>\d+)"
+)
+
+
+def epoch_family_signature(lora_name: Any) -> dict[str, str] | None:
+    """Return a stable same-folder signature for an epoch-versioned LoRA.
+
+    Only the numeric token immediately following ``epoch``/``ep`` is treated as
+    variable. Everything else in the filename must match exactly.
+    """
+
+    normalized = str(lora_name or "").replace("\\", "/").strip("/")
+    if not normalized:
+        return None
+    folder, _, basename = normalized.rpartition("/")
+    if not basename:
+        basename = folder
+        folder = ""
+    match = _EPOCH_FAMILY_TOKEN.search(basename)
+    if not match:
+        return None
+    family_key = (
+        basename[: match.start("number")]
+        + "{epoch}"
+        + basename[match.end("number") :]
+    ).casefold()
+    pattern = (
+        basename[: match.start("number")]
+        + "*"
+        + basename[match.end("number") :]
+    )
+    return {
+        "folder": folder,
+        "folder_key": folder.casefold(),
+        "family_key": family_key,
+        "pattern": pattern,
+    }
+
+
+def matching_epoch_family(lora_name: Any, candidates: list[Any]) -> list[str]:
+    """Return sibling LoRAs in the exact same epoch family and folder."""
+
+    signature = epoch_family_signature(lora_name)
+    if not signature:
+        return []
+    matches: list[str] = []
+    for candidate in candidates:
+        value = str(candidate or "")
+        other = epoch_family_signature(value)
+        if not other:
+            continue
+        if (
+            other["folder_key"] == signature["folder_key"]
+            and other["family_key"] == signature["family_key"]
+        ):
+            matches.append(value)
+    return sorted(set(matches), key=lambda item: item.casefold())
+
 def _first_top_level_segment(value: str) -> str:
     """Return text before the first top-level comma without breaking ``(a,b)``."""
 

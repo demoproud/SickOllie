@@ -709,22 +709,12 @@ function registerSidebar() {
 
 app.registerExtension({
   name: "SickOllie.SOS.LogOrganizer",
-  commands: [{
-    id: "soloLog.openOrganizer",
-    label: "Open SOS Log Organizer",
-    icon: "pi pi-align-left",
-    function: openOrganizer,
-  }],
-  menuCommands: [{ path: ["Sick Ollie"], commands: ["soloLog.openOrganizer"] }],
   async setup() {
     ensureStyle();
-    // Join the shared Studio hub when the Sick Ollie pack is installed, while
-    // preserving the standalone sidebar for users running only this extension.
-    setTimeout(() => {
-      if (typeof window.SickOllieRegisterSoloHubItem === "function") {
-        window.SickOllieRegisterSoloHubItem({ id: "log-organizer", label: "Log Organizer", description: "Clean, classify, rename, and organize Prompt Core logs.", color: "#68ff92", open: openOrganizer });
-      } else registerSidebar();
-    }, 250);
+    // Retired from the primary SOS hub/menu in Creative Library vNext. Keep the
+    // implementation and legacy launcher-node hook below so old workflows can
+    // still open it deliberately without exposing source-log plumbing as a
+    // first-run product surface.
   },
   beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== "SOLO_Log_Organizer") return;

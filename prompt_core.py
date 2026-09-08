@@ -7,6 +7,11 @@ from typing import Any
 import folder_paths
 
 try:
+    from .creative_library_paths import canonical_log_reference
+except ImportError:  # Direct-module loading used by local validators and some ComfyUI setups.
+    from creative_library_paths import canonical_log_reference
+
+try:
     from aiohttp import web
     from server import PromptServer
 except Exception:  # pragma: no cover - unavailable outside ComfyUI runtime
@@ -14,7 +19,7 @@ except Exception:  # pragma: no cover - unavailable outside ComfyUI runtime
     PromptServer = None
 
 NO_FILE = "[None]"
-PROMPT_SOURCES = ["manual", "log"]
+PROMPT_SOURCES = ["manual", "input", "log"]
 INDEX_MODES = ["fixed", "increment", "decrement", "randomize", "shuffle"]
 DEFAULT_CLEANUP_RULES = r"""\?\[|\]
 \\?[()]
@@ -37,6 +42,15 @@ def _ensure_log_directories() -> Path:
 def _category_choices(category: str) -> list[str]:
     root = _ensure_log_directories()
     category_root = root / LOG_CATEGORIES[category]
+    if category == "prompt":
+        try:
+            from .solo_recipe_catalog import _sync_library_if_stale
+            _sync_library_if_stale()
+        except Exception:
+            pass
+        catalog_roots = [category_root / "Creative Library" / name for name in ("Prompts", "Templates")]
+        if any(path.exists() for path in catalog_roots):
+            category_root = category_root / "Creative Library"
     values = []
     for file_path in category_root.rglob("*.txt"):
         if file_path.is_file():
@@ -48,7 +62,7 @@ def _category_choices(category: str) -> list[str]:
 
 
 def _resolve_log_path(relative_path: str, category: str) -> Path | None:
-    value = str(relative_path or "").strip().replace("\\", "/")
+    value = canonical_log_reference(relative_path, category)
     if not value or value == NO_FILE:
         return None
     relative = Path(value)
@@ -193,6 +207,7 @@ class SOPromptLogEngine:
                 "cleanup_rules": ("STRING", {"default": DEFAULT_CLEANUP_RULES, "multiline": True, "dynamicPrompts": False}),
                 "saved_prompt": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": False}),
             },
+            "optional": {"manual_prompt_input": ("STRING", {"forceInput": True})},
             "hidden": {"extra_pnginfo": "EXTRA_PNGINFO", "unique_id": "UNIQUE_ID"},
         }
 
@@ -240,6 +255,7 @@ class SOPromptLogEngine:
         cleanup_enabled,
         cleanup_rules,
         saved_prompt,
+        manual_prompt_input=None,
         extra_pnginfo=None,
         unique_id=None,
     ):
@@ -249,20 +265,40 @@ class SOPromptLogEngine:
         outfit_C, outfit_index_C_resolved, outfit_count_C = _load_line(outfit_log_file_C, "outfit", outfit_index_C)
         scene_line, scene_index_resolved, scene_count = _load_line(scene_log_file, "scene", scene_index)
 
-        source_prompt = prompt_line if str(prompt_source) == "log" else str(manual_prompt)
+        selected_prompt_source = str(prompt_source or "manual").strip().lower()
+        if selected_prompt_source not in {"manual", "input", "log"}:
+            selected_prompt_source = "manual"
+        external_prompt_available = manual_prompt_input is not None
+        external_prompt_value = "" if manual_prompt_input is None else str(manual_prompt_input)
+        effective_prompt_source = selected_prompt_source
+        effective_manual_prompt = str(manual_prompt)
+        if effective_prompt_source == "log":
+            source_prompt = prompt_line
+        elif effective_prompt_source == "input":
+            source_prompt = external_prompt_value if external_prompt_available else ""
+        else:
+            source_prompt = effective_manual_prompt
 
-        # Track what actually participated in this prompt before replacing any
-        # tokens. Loaded log rows are not considered "used" unless their token
-        # was present in the selected source prompt.
-        prompt_log_used = str(prompt_source) == "log" and bool(prompt_line)
-        outfit_a_used = bool(outfit_A) and bool(str(outfit_token_A)) and str(outfit_token_A) in source_prompt
-        outfit_b_used = bool(outfit_B) and bool(str(outfit_token_B)) and str(outfit_token_B) in source_prompt
-        outfit_c_used = bool(outfit_C) and bool(str(outfit_token_C)) and str(outfit_token_C) in source_prompt
-        scene_used = bool(scene_line) and bool(str(scene_token)) and str(scene_token) in source_prompt
-        name_used = bool(str(name_value)) and bool(str(name_token)) and str(name_token) in source_prompt
-        item_used = bool(str(item_value)) and bool(str(item_token)) and str(item_token) in source_prompt
+        # Prefix and suffix are part of the prompt template, not post-processing.
+        # Assemble them before placeholder resolution so tokens introduced there
+        # (for example SCENE in a suffix on a read-only Prompt Log) resolve just
+        # like tokens written in the source prompt itself.
+        assembled = _join_prompt_parts(
+            prefix_suffix_separator,
+            prefix_text if prefix_enabled else "",
+            source_prompt,
+            suffix_text if suffix_enabled else "",
+        )
 
-        assembled = source_prompt
+        # Track what actually participated in the complete assembled template
+        # before replacing any tokens.
+        prompt_log_used = effective_prompt_source == "log" and bool(prompt_line)
+        outfit_a_used = bool(outfit_A) and bool(str(outfit_token_A)) and str(outfit_token_A) in assembled
+        outfit_b_used = bool(outfit_B) and bool(str(outfit_token_B)) and str(outfit_token_B) in assembled
+        outfit_c_used = bool(outfit_C) and bool(str(outfit_token_C)) and str(outfit_token_C) in assembled
+        scene_used = bool(scene_line) and bool(str(scene_token)) and str(scene_token) in assembled
+        name_used = bool(str(name_value)) and bool(str(name_token)) and str(name_token) in assembled
+        item_used = bool(str(item_value)) and bool(str(item_token)) and str(item_token) in assembled
         for token, value, used in (
             (outfit_token_A, outfit_A, outfit_a_used),
             (outfit_token_B, outfit_B, outfit_b_used),
@@ -276,12 +312,6 @@ class SOPromptLogEngine:
         if item_used:
             assembled = _apply_token(assembled, item_token, item_value)
 
-        assembled = _join_prompt_parts(
-            prefix_suffix_separator,
-            prefix_text if prefix_enabled else "",
-            assembled,
-            suffix_text if suffix_enabled else "",
-        )
         final_prompt = _apply_cleanup_rules(assembled, cleanup_rules) if cleanup_enabled else assembled.strip()
 
         def _log_meta(used, token, file_name, index, count, line):
@@ -298,7 +328,7 @@ class SOPromptLogEngine:
             return data
 
         resolved_metadata = {
-            "schema_version": 2,
+            "schema_version": 3,
             "final_prompt": final_prompt,
             "source_prompt": source_prompt,
             "prompt": ({
@@ -307,10 +337,15 @@ class SOPromptLogEngine:
                 "index": int(prompt_index_resolved),
                 "count": int(prompt_count),
                 "line": prompt_line,
-            } if prompt_log_used else {
+            } if prompt_log_used else ({
+                "source": "input",
+                "input_prompt": source_prompt,
+                "external_input": external_prompt_available,
+            } if effective_prompt_source == "input" else {
                 "source": "manual",
-                "manual_prompt": str(manual_prompt),
-            }),
+                "manual_prompt": effective_manual_prompt,
+                "external_input": False,
+            })),
             "outfit_a": _log_meta(outfit_a_used, outfit_token_A, outfit_log_file_A, outfit_index_A_resolved, outfit_count_A, outfit_A),
             "outfit_b": _log_meta(outfit_b_used, outfit_token_B, outfit_log_file_B, outfit_index_B_resolved, outfit_count_B, outfit_B),
             "outfit_c": _log_meta(outfit_c_used, outfit_token_C, outfit_log_file_C, outfit_index_C_resolved, outfit_count_C, outfit_C),
@@ -358,11 +393,20 @@ class SOPromptLogEngine:
             if isinstance(workflow, dict):
                 node = _find_workflow_node(workflow, unique_id)
                 if node:
+                    runtime_source = effective_prompt_source
+                    runtime_manual_prompt = str(manual_prompt)
+                    widgets_values = node.get("widgets_values")
+                    if isinstance(widgets_values, list) and len(widgets_values) >= 2:
+                        widgets_values[0] = runtime_source
+                        widgets_values[1] = runtime_manual_prompt
                     props = node.setdefault("properties", {})
                     props.update({
-                        "so_prompt_core_schema_version": 10,
+                        "so_prompt_core_schema_version": 12,
                         "so_saved_final_prompt": final_prompt,
                         "so_saved_source_prompt": source_prompt,
+                        "so_runtime_prompt_source": runtime_source,
+                        "so_runtime_manual_prompt": runtime_manual_prompt,
+                        "so_external_manual_prompt_value": source_prompt if effective_prompt_source == "input" else props.get("so_external_manual_prompt_value", ""),
                         "so_saved_prompt_line": prompt_line if prompt_log_used else "",
                         "so_saved_outfit_line": outfit_A if outfit_a_used else "",
                         "so_saved_outfit_line_B": outfit_B if outfit_b_used else "",

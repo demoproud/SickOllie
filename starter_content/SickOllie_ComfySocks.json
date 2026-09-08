@@ -1,0 +1,907 @@
+{
+  "id": "091dac7c-747b-4c46-9549-6b22b8e47134",
+  "revision": 2,
+  "last_node_id": 529,
+  "last_link_id": 1014,
+  "nodes": [
+    {
+      "id": 513,
+      "type": "SOOutputBuilderSaveStudio",
+      "pos": [
+        400,
+        4870
+      ],
+      "size": [
+        820,
+        1037
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "images",
+          "name": "images",
+          "shape": 7,
+          "type": "IMAGE",
+          "pos": [
+            0,
+            120
+          ],
+          "link": null
+        },
+        {
+          "label": "",
+          "name": "generation_info",
+          "shape": 7,
+          "type": "STRING",
+          "pos": [
+            -10000,
+            -10000
+          ],
+          "link": null
+        },
+        {
+          "label": "",
+          "name": "applied_loras",
+          "shape": 7,
+          "type": "STRING",
+          "pos": [
+            -10000,
+            -10000
+          ],
+          "link": null
+        },
+        {
+          "label": "samples",
+          "name": "samples",
+          "shape": 7,
+          "type": "LATENT",
+          "pos": [
+            0,
+            141
+          ],
+          "link": 976
+        },
+        {
+          "label": "vae",
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "pos": [
+            0,
+            162
+          ],
+          "link": 977
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "pos": [
+            820,
+            120
+          ],
+          "links": [
+            990
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SOOutputBuilderSaveStudio",
+        "so_saved_output_path": "output\\_CreatorStudio_v4\\print\\print_SICK OLLIE_Krea2_FP8_013828_00001.png",
+        "so_output_resolved_values": {
+          "clean_name": "print",
+          "raw_stem": "print",
+          "model_name": "SICK OLLIE_Krea2_FP8",
+          "main_folder": "rolenzio",
+          "main_trigger": "80scomprint, A scan of a vintage ad from the 1980s",
+          "seed": "4815162342",
+          "prompt_index": "",
+          "outfit_index": "",
+          "scene_index": "",
+          "prompt_file": "",
+          "outfit_file": "",
+          "scene_file": "",
+          "context_source": "auto"
+        }
+      },
+      "widgets_values": [
+        "_CreatorStudio_v4",
+        "",
+        "clean_name",
+        "[None]",
+        "[None]",
+        "[None]",
+        "_",
+        "",
+        "raw_stem",
+        "model_name",
+        "time_hhmmss",
+        "[None]",
+        "[None]",
+        "[None]",
+        "_",
+        "png",
+        100,
+        5,
+        true,
+        true,
+        true,
+        "",
+        "",
+        "",
+        0,
+        "output\\_CreatorStudio_v4\\binx\\binx_krea2_epoch_12_SICK OLLIE_Krea2_FP8_184616_00001.png",
+        "output\\Sick Ollie Yearbooks\\Creative Library\\no\\no_lora_SICK OLLIE_Krea2_FP8_192735_00001.png",
+        "output\\Sick Ollie Yearbooks\\Creative Library\\no\\no_lora_SICK OLLIE_Krea2_FP8_192735_00001.png",
+        "output\\Sick Ollie Yearbooks\\Creative Library\\no\\no_lora_SICK OLLIE_Krea2_FP8_213003_00001.png",
+        "output\\_CreatorStudio_v4\\Drew\\Drew Struzan_SICK OLLIE_Krea2_FP8_232026_00001.png",
+        "output\\_CreatorStudio_v4\\Delirium\\Delirium_SICK OLLIE_Krea2_FP8_233242_00001.png",
+        "output\\_CreatorStudio_v4\\print\\print_SICK OLLIE_Krea2_FP8_013828_00001.png"
+      ],
+      "color": "#1b1721",
+      "bgcolor": "#08070c",
+      "boxcolor": "#ff4ab8"
+    },
+    {
+      "id": 518,
+      "type": "SOFitPreviewStudio",
+      "pos": [
+        1258.8018042311555,
+        3726.6923779156236
+      ],
+      "size": [
+        3322,
+        2309.3104379139613
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 990
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SOFitPreviewStudio",
+        "so_fit_preview_base_width": 1656,
+        "so_fit_preview_images": [
+          {
+            "filename": "SickOllieFitPreview_temp_ymqiy_00045_.png",
+            "type": "temp",
+            "subfolder": ""
+          }
+        ],
+        "so_fit_preview_index": 0,
+        "so_fit_preview_pins": [
+          {
+            "filename": "SickOllieFitPreview_temp_ymqiy_00004_.png",
+            "type": "temp",
+            "subfolder": ""
+          }
+        ],
+        "so_fit_preview_compare": true,
+        "so_fit_preview_updated_at": 1788845918145
+      },
+      "widgets_values": [
+        "Contain + Upscale",
+        "Blurred Image",
+        "#08070c"
+      ],
+      "color": "#1b1721",
+      "bgcolor": "#08070c",
+      "boxcolor": "#ff4ab8"
+    },
+    {
+      "id": 512,
+      "type": "SOGenerationPipelineStudio",
+      "pos": [
+        400,
+        3730
+      ],
+      "size": [
+        820,
+        1078
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "model",
+          "name": "model",
+          "type": "MODEL",
+          "pos": [
+            0,
+            120
+          ],
+          "link": 974
+        },
+        {
+          "label": "positive_text",
+          "name": "positive_text",
+          "type": "STRING",
+          "pos": [
+            0,
+            141
+          ],
+          "link": 975
+        },
+        {
+          "label": "seed_input",
+          "name": "seed_input",
+          "shape": 7,
+          "type": "INT",
+          "pos": [
+            0,
+            162
+          ],
+          "link": null
+        },
+        {
+          "label": "positive_conditioning",
+          "name": "positive_conditioning",
+          "shape": 7,
+          "type": "CONDITIONING",
+          "pos": [
+            0,
+            183
+          ],
+          "link": null
+        },
+        {
+          "label": "negative_conditioning",
+          "name": "negative_conditioning",
+          "shape": 7,
+          "type": "CONDITIONING",
+          "pos": [
+            0,
+            204
+          ],
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "pos": [
+            820,
+            120
+          ],
+          "links": [
+            976
+          ]
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "pos": [
+            820,
+            141
+          ],
+          "links": [
+            977
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SOGenerationPipelineStudio",
+        "so_generation_core_schema_version": 40,
+        "so_last_used_seed": 4815162342,
+        "so_generation_dashboard_advanced": false,
+        "so_last_width": 1440,
+        "so_last_height": 1920
+      },
+      "widgets_values": [
+        "qwen3vl_4b_fp8_scaled.safetensors",
+        "krea2",
+        "default",
+        "qwen_image_vae.safetensors",
+        "custom",
+        1440,
+        1920,
+        "3:4 (Portrait Standard)",
+        1,
+        1,
+        9,
+        1,
+        "euler",
+        "beta",
+        1,
+        1.25,
+        4815162342
+      ],
+      "color": "#1b1721",
+      "bgcolor": "#08070c",
+      "boxcolor": "#ff4ab8"
+    },
+    {
+      "id": 527,
+      "type": "SOImageMetadataCoreStudio",
+      "pos": [
+        -2404.784624141712,
+        4608.975369935941
+      ],
+      "size": [
+        1727.2289325333709,
+        1724.0704846750132
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "final_prompt",
+          "type": "STRING",
+          "links": [
+            1012
+          ]
+        },
+        {
+          "name": "source_prompt",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "links": []
+        },
+        {
+          "name": "generation_settings",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "models",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "resolved_inputs",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "full_report",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "metadata_json",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "has_metadata",
+          "type": "BOOLEAN",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SOImageMetadataCoreStudio",
+        "so_metadata_core_payload": {
+          "status": "File: 5746e387cb9b_no_lora_SICK_OLLIE_Krea2_FP8_174139_00001.png\nImage: 1440 × 1920 PNG\nMetadata detected: Sick Ollie structured, Comfy prompt, Comfy workflow, parameters",
+          "final_prompt": "A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve., Oversized display typography is integrated into the composition, reading exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic",
+          "source_prompt": "A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve.",
+          "generation": "Steps: 9\nCFG: 1.0\nSampler: euler\nScheduler: beta\nDenoise: 1.0\nModel shift: 1.25\nWidth: 1440\nHeight: 1920\nBatch size: 1",
+          "models": "Diffusion model: SICK OLLIE_Krea2_FP8.safetensors\nModel hash: fb51603fbb\nWeight dtype: default\nText encoder: qwen3vl_4b_fp8_scaled.safetensors\nVAE: qwen_image_vae.safetensors\nVAE hash: a70580f021",
+          "prompt_log": "",
+          "outfit_a": "",
+          "outfit_b": "",
+          "outfit_c": "",
+          "scene": "",
+          "copy_values": {
+            "outfit_a": "",
+            "outfit_b": "",
+            "outfit_c": "",
+            "scene": ""
+          },
+          "substitutions": "Suffix: Oversized display typography is integrated into the composition, reading exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic",
+          "resolved_inputs": "GENERATION\nSteps: 9\nCFG: 1.0\nSampler: euler\nScheduler: beta\nDenoise: 1.0\nModel shift: 1.25\nWidth: 1440\nHeight: 1920\nBatch size: 1\n\nMODELS + LORAS\nDiffusion model: SICK OLLIE_Krea2_FP8.safetensors\nModel hash: fb51603fbb\nWeight dtype: default\nText encoder: qwen3vl_4b_fp8_scaled.safetensors\nVAE: qwen_image_vae.safetensors\nVAE hash: a70580f021\n\nSUBSTITUTIONS\nSuffix: Oversized display typography is integrated into the composition, reading exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic",
+          "full_report": "FINAL PROMPT\nA vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve., Oversized display typography is integrated into the composition, reading exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic\n\nSOURCE PROMPT\nA vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve.\n\nMETADATA\nGENERATION\nSteps: 9\nCFG: 1.0\nSampler: euler\nScheduler: beta\nDenoise: 1.0\nModel shift: 1.25\nWidth: 1440\nHeight: 1920\nBatch size: 1\n\nMODELS + LORAS\nDiffusion model: SICK OLLIE_Krea2_FP8.safetensors\nModel hash: fb51603fbb\nWeight dtype: default\nText encoder: qwen3vl_4b_fp8_scaled.safetensors\nVAE: qwen_image_vae.safetensors\nVAE hash: a70580f021\n\nSUBSTITUTIONS\nSuffix: Oversized display typography is integrated into the composition, reading exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic",
+          "metadata_json": "{\n  \"source_file\": \"5746e387cb9b_no_lora_SICK_OLLIE_Krea2_FP8_174139_00001.png\",\n  \"image\": {\n    \"width\": 1440,\n    \"height\": 1920,\n    \"format\": \"PNG\"\n  },\n  \"resolved\": {\n    \"schema_version\": 6,\n    \"final_prompt\": \"A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve., Oversized display typography is integrated into the composition, reading exactly:\\n\\n\\\"sick\\nollie\\ncreator\\nkit\\nstudio\\\"\\n\\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic\",\n    \"source_prompt\": \"A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve.\",\n    \"prompt\": {\n      \"source\": \"manual\",\n      \"manual_prompt\": \"A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve.\"\n    },\n    \"outfit_a\": {},\n    \"outfit_b\": {},\n    \"outfit_c\": {},\n    \"scene\": {},\n    \"trigger\": {\n      \"used\": false,\n      \"placement\": \"prepend\",\n      \"action\": \"missing_source\",\n      \"token\": \"TRIGGER\",\n      \"matched_tokens\": [],\n      \"value\": \"\",\n      \"source\": \"loader\"\n    },\n    \"name\": {},\n    \"item\": {},\n    \"prefix\": {},\n    \"suffix\": {\n      \"enabled\": true,\n      \"text\": \"Oversized display typography is integrated into the composition, reading exactly:\\n\\n\\\"sick\\nollie\\ncreator\\nkit\\nstudio\\\"\\n\\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic\"\n    },\n    \"separator\": \", \",\n    \"cleanup\": {\n      \"enabled\": true\n    }\n  },\n  \"generation\": {\n    \"steps\": 9,\n    \"cfg\": 1.0,\n    \"sampler_name\": \"euler\",\n    \"scheduler\": \"beta\",\n    \"denoise\": 1.0,\n    \"batch_size\": 1,\n    \"positive_prompt\": \"A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve., Oversized display typography is integrated into the composition, reading exactly:\\n\\n\\\"sick\\nollie\\ncreator\\nkit\\nstudio\\\"\\n\\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic\",\n    \"negative_prompt\": \"\",\n    \"clip_name\": \"qwen3vl_4b_fp8_scaled.safetensors\",\n    \"clip_type\": \"krea2\",\n    \"clip_device\": \"default\",\n    \"vae_name\": \"qwen_image_vae.safetensors\",\n    \"resolution_mode\": \"custom\",\n    \"width\": 1440,\n    \"height\": 1920,\n    \"seed_used\": 221621208287905,\n    \"shift\": 1.25,\n    \"positive_conditioning_source\": \"internal_text\",\n    \"negative_conditioning_source\": \"internal_empty\"\n  },\n  \"models\": {\n    \"diffusion_model\": \"SICK OLLIE_Krea2_FP8.safetensors\",\n    \"diffusion_model_hash\": \"fb51603fbb\",\n    \"weight_dtype\": \"default\",\n    \"text_encoder\": \"qwen3vl_4b_fp8_scaled.safetensors\",\n    \"vae\": \"qwen_image_vae.safetensors\",\n    \"vae_hash\": \"a70580f021\",\n    \"main_lora\": {},\n    \"secondary_loras\": [],\n    \"all_loras\": [],\n    \"main_trigger\": \"\"\n  },\n  \"final_prompt\": \"A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve., Oversized display typography is integrated into the composition, reading exactly:\\n\\n\\\"sick\\nollie\\ncreator\\nkit\\nstudio\\\"\\n\\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic\",\n  \"source_prompt\": \"A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve.\"\n}",
+          "seed": 221621208287905,
+          "seed_text": "221621208287905",
+          "has_metadata": true
+        },
+        "so_metadata_preview_images": [
+          {
+            "filename": "5746e387cb9b_no_lora_SICK_OLLIE_Krea2_FP8_174139_00001.png",
+            "type": "temp",
+            "subfolder": "SickOllieMetadata"
+          }
+        ]
+      },
+      "widgets_values": [
+        null,
+        null,
+        null,
+        "so-temp::5746e387cb9b_no_lora_SICK_OLLIE_Krea2_FP8_174139_00001.png",
+        "File: 5746e387cb9b_no_lora_SICK_OLLIE_Krea2_FP8_174139_00001.png\nImage: 1440 × 1920 PNG\nMetadata detected: Sick Ollie structured, Comfy prompt, Comfy workflow, parameters",
+        "A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve., Oversized display typography is integrated into the composition, reading exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic",
+        "A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve.",
+        "Steps: 9\nCFG: 1.0\nSampler: euler\nScheduler: beta\nDenoise: 1.0\nModel shift: 1.25\nWidth: 1440\nHeight: 1920\nBatch size: 1",
+        "Diffusion model: SICK OLLIE_Krea2_FP8.safetensors\nModel hash: fb51603fbb\nWeight dtype: default\nText encoder: qwen3vl_4b_fp8_scaled.safetensors\nVAE: qwen_image_vae.safetensors\nVAE hash: a70580f021",
+        "GENERATION\nSteps: 9\nCFG: 1.0\nSampler: euler\nScheduler: beta\nDenoise: 1.0\nModel shift: 1.25\nWidth: 1440\nHeight: 1920\nBatch size: 1\n\nMODELS + LORAS\nDiffusion model: SICK OLLIE_Krea2_FP8.safetensors\nModel hash: fb51603fbb\nWeight dtype: default\nText encoder: qwen3vl_4b_fp8_scaled.safetensors\nVAE: qwen_image_vae.safetensors\nVAE hash: a70580f021\n\nSUBSTITUTIONS\nSuffix: Oversized display typography is integrated into the composition, reading exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic",
+        "Steps: 9\nCFG: 1.0\nSampler: euler\nScheduler: beta\nDenoise: 1.0\nModel shift: 1.25\nWidth: 1440\nHeight: 1920\nBatch size: 1",
+        "Diffusion model: SICK OLLIE_Krea2_FP8.safetensors\nModel hash: fb51603fbb\nWeight dtype: default\nText encoder: qwen3vl_4b_fp8_scaled.safetensors\nVAE: qwen_image_vae.safetensors\nVAE hash: a70580f021",
+        "GENERATION\nSteps: 9\nCFG: 1.0\nSampler: euler\nScheduler: beta\nDenoise: 1.0\nModel shift: 1.25\nWidth: 1440\nHeight: 1920\nBatch size: 1\n\nMODELS + LORAS\nDiffusion model: SICK OLLIE_Krea2_FP8.safetensors\nModel hash: fb51603fbb\nWeight dtype: default\nText encoder: qwen3vl_4b_fp8_scaled.safetensors\nVAE: qwen_image_vae.safetensors\nVAE hash: a70580f021\n\nSUBSTITUTIONS\nSuffix: Oversized display typography is integrated into the composition, reading exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic",
+        "Steps: 9\nCFG: 1.0\nSampler: euler\nScheduler: beta\nDenoise: 1.0\nModel shift: 1.25\nWidth: 1440\nHeight: 1920\nBatch size: 1",
+        "Diffusion model: SICK OLLIE_Krea2_FP8.safetensors\nModel hash: fb51603fbb\nWeight dtype: default\nText encoder: qwen3vl_4b_fp8_scaled.safetensors\nVAE: qwen_image_vae.safetensors\nVAE hash: a70580f021"
+      ],
+      "color": "#1b1721",
+      "bgcolor": "#08070c",
+      "boxcolor": "#ff4ab8"
+    },
+    {
+      "id": 511,
+      "type": "SOPromptLogEngineStudio",
+      "pos": [
+        -450,
+        4600
+      ],
+      "size": [
+        820,
+        1740
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "color_off": "#7f8792",
+          "color_on": "#6ee7a2",
+          "label": " ",
+          "name": "main_trigger",
+          "shape": 7,
+          "type": "STRING",
+          "pos": [
+            0,
+            120
+          ],
+          "link": 994
+        },
+        {
+          "color_off": "#7f8792",
+          "color_on": "#6ee7a2",
+          "label": " ",
+          "name": "manual_prompt_input",
+          "shape": 7,
+          "type": "STRING",
+          "pos": [
+            0,
+            141
+          ],
+          "link": 1012
+        },
+        {
+          "color_off": "#7f8792",
+          "color_on": "#6ee7a2",
+          "label": "NAME value",
+          "name": "name_value",
+          "type": "STRING",
+          "widget": {
+            "name": "name_value"
+          },
+          "link": 1011
+        },
+        {
+          "color_off": "#7f8792",
+          "color_on": "#6ee7a2",
+          "label": "BRAND value",
+          "name": "item_value",
+          "type": "STRING",
+          "widget": {
+            "name": "item_value"
+          },
+          "link": 1014
+        },
+        {
+          "color_off": "#7f8792",
+          "color_on": "#6ee7a2",
+          "label": "Prefix text",
+          "name": "prefix_text",
+          "type": "STRING",
+          "widget": {
+            "name": "prefix_text"
+          },
+          "link": null
+        },
+        {
+          "color_off": "#7f8792",
+          "color_on": "#6ee7a2",
+          "label": "Suffix text",
+          "name": "suffix_text",
+          "type": "STRING",
+          "widget": {
+            "name": "suffix_text"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "final_prompt",
+          "type": "STRING",
+          "pos": [
+            820,
+            120
+          ],
+          "links": [
+            975
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SOPromptLogEngineStudio",
+        "so_prompt_core_schema_version": 16,
+        "so_prompt_dashboard_version": 10,
+        "so_prompt_shuffle_state": {},
+        "so_saved_final_prompt": "80scomprint, A scan of a vintage ad from the 1980s, frame from an old bootleg VHS ad infused with eerie analog warmth, purple color bleeding into the cursive red text overlay, rolling scan lines and soft degraded grain, building an intimate and seductively melancholic mood, A vertical photorealistic editorial poster composition with a deliberate layered graphic design. The final image is composed in three clear layers: a cosmic neon background in the back, a pair of feminine legs in the middle layer, and large fluorescent typography in the frontmost top layer. The typography must remain fully visible, unobstructed, and never hidden behind the legs or visual effects.\n\nOnly a pair of feminine legs and feet is visible, with the rest of the body completely offscreen beyond the upper-right edge. The pose closely follows a playful diagonal floating composition: the legs enter from the upper-right side of the frame and angle diagonally downward toward the lower-center area. Both knees are bent, with one knee higher and closer to the upper-right corner and the other leg slightly behind it. The lower portions of the legs descend through the center-right of the frame, and the feet angle downward with a soft pointed graceful pose. One foot extends lower toward the bottom-center-right, while the other remains slightly higher and tucked back. The silhouette should feel dynamic, weightless, and gently curled, preserving the original playful diagonal angle rather than a straight vertical hanging pose.\n\nThe legs wear white ribbed crew socks decorated with repeating red rose blossoms and small green leaves. The socks are clean, cute, and visually prominent, with realistic knit texture and a naturally fitted appearance around the ankles and feet. Subtle floral leg tattoos add personality and visual detail.\n\nSoft neutral studio lighting keeps the legs and socks sharply defined, while hot pink and electric cyan rim lighting traces their contours. The skin appears glossy and dimensional with realistic texture and gentle specular highlights.\n\nThe background is deep black and midnight blue with a dreamy cinematic 1980s synth-record atmosphere. Irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow glow around the outer borders. Long smeared rainbow refractions sweep through the upper-left and lower-right corners. Tiny stars, drifting particles, defocused colored light orbs, occasional starburst flares, fluorescent dye-like light bleed, subtle analog grain, gentle chromatic misregistration, and soft halation create layered cosmic depth.\n\nA calmer darker pocket of space is preserved behind the main typography for readability, while the brightest rainbow effects remain concentrated near the edges.\n\nLarge fluorescent hot-pink typography is placed as the frontmost top layer of the poster, floating over the finished image as a clean graphic overlay. The text must always appear in front of the legs and remain fully readable even where the composition overlaps visually.\n\nThe typography reads exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nEach word appears on its own line. The text is stacked vertically and arranged as a bold editorial design element along the left side and lower-left area of the frame, large and highly legible, in a bold retro display serif with broad sculptural curves and elegant curled terminals. The lettering is saturated fluorescent pink with subtle glow and crisp edges. All five words are correctly spelled, fully contained inside the frame, evenly spaced, and completely visible.\n\nThe legs may extend visually across the right side and slightly into the center of the composition, but the typography remains the topmost layer and is never blocked. The overall effect is a polished photorealistic fashion poster with dreamy synthwave energy, glossy neon lighting, cosmic depth, and bold foreground typography, while preserving the original diagonal pose and angle of the legs.",
+        "so_last_assembly_status": {
+          "schema_version": 6,
+          "final_prompt": "80scomprint, A scan of a vintage ad from the 1980s, frame from an old bootleg VHS ad infused with eerie analog warmth, purple color bleeding into the cursive red text overlay, rolling scan lines and soft degraded grain, building an intimate and seductively melancholic mood, A vertical photorealistic editorial poster composition with a deliberate layered graphic design. The final image is composed in three clear layers: a cosmic neon background in the back, a pair of feminine legs in the middle layer, and large fluorescent typography in the frontmost top layer. The typography must remain fully visible, unobstructed, and never hidden behind the legs or visual effects.\n\nOnly a pair of feminine legs and feet is visible, with the rest of the body completely offscreen beyond the upper-right edge. The pose closely follows a playful diagonal floating composition: the legs enter from the upper-right side of the frame and angle diagonally downward toward the lower-center area. Both knees are bent, with one knee higher and closer to the upper-right corner and the other leg slightly behind it. The lower portions of the legs descend through the center-right of the frame, and the feet angle downward with a soft pointed graceful pose. One foot extends lower toward the bottom-center-right, while the other remains slightly higher and tucked back. The silhouette should feel dynamic, weightless, and gently curled, preserving the original playful diagonal angle rather than a straight vertical hanging pose.\n\nThe legs wear white ribbed crew socks decorated with repeating red rose blossoms and small green leaves. The socks are clean, cute, and visually prominent, with realistic knit texture and a naturally fitted appearance around the ankles and feet. Subtle floral leg tattoos add personality and visual detail.\n\nSoft neutral studio lighting keeps the legs and socks sharply defined, while hot pink and electric cyan rim lighting traces their contours. The skin appears glossy and dimensional with realistic texture and gentle specular highlights.\n\nThe background is deep black and midnight blue with a dreamy cinematic 1980s synth-record atmosphere. Irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow glow around the outer borders. Long smeared rainbow refractions sweep through the upper-left and lower-right corners. Tiny stars, drifting particles, defocused colored light orbs, occasional starburst flares, fluorescent dye-like light bleed, subtle analog grain, gentle chromatic misregistration, and soft halation create layered cosmic depth.\n\nA calmer darker pocket of space is preserved behind the main typography for readability, while the brightest rainbow effects remain concentrated near the edges.\n\nLarge fluorescent hot-pink typography is placed as the frontmost top layer of the poster, floating over the finished image as a clean graphic overlay. The text must always appear in front of the legs and remain fully readable even where the composition overlaps visually.\n\nThe typography reads exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nEach word appears on its own line. The text is stacked vertically and arranged as a bold editorial design element along the left side and lower-left area of the frame, large and highly legible, in a bold retro display serif with broad sculptural curves and elegant curled terminals. The lettering is saturated fluorescent pink with subtle glow and crisp edges. All five words are correctly spelled, fully contained inside the frame, evenly spaced, and completely visible.\n\nThe legs may extend visually across the right side and slightly into the center of the composition, but the typography remains the topmost layer and is never blocked. The overall effect is a polished photorealistic fashion poster with dreamy synthwave energy, glossy neon lighting, cosmic depth, and bold foreground typography, while preserving the original diagonal pose and angle of the legs.",
+          "source_prompt": "A vertical photorealistic editorial poster composition with a deliberate layered graphic design. The final image is composed in three clear layers: a cosmic neon background in the back, a pair of feminine legs in the middle layer, and large fluorescent typography in the frontmost top layer. The typography must remain fully visible, unobstructed, and never hidden behind the legs or visual effects.\n\nOnly a pair of feminine legs and feet is visible, with the rest of the body completely offscreen beyond the upper-right edge. The pose closely follows a playful diagonal floating composition: the legs enter from the upper-right side of the frame and angle diagonally downward toward the lower-center area. Both knees are bent, with one knee higher and closer to the upper-right corner and the other leg slightly behind it. The lower portions of the legs descend through the center-right of the frame, and the feet angle downward with a soft pointed graceful pose. One foot extends lower toward the bottom-center-right, while the other remains slightly higher and tucked back. The silhouette should feel dynamic, weightless, and gently curled, preserving the original playful diagonal angle rather than a straight vertical hanging pose.\n\nThe legs wear white ribbed crew socks decorated with repeating red rose blossoms and small green leaves. The socks are clean, cute, and visually prominent, with realistic knit texture and a naturally fitted appearance around the ankles and feet. Subtle floral leg tattoos add personality and visual detail.\n\nSoft neutral studio lighting keeps the legs and socks sharply defined, while hot pink and electric cyan rim lighting traces their contours. The skin appears glossy and dimensional with realistic texture and gentle specular highlights.\n\nThe background is deep black and midnight blue with a dreamy cinematic 1980s synth-record atmosphere. Irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow glow around the outer borders. Long smeared rainbow refractions sweep through the upper-left and lower-right corners. Tiny stars, drifting particles, defocused colored light orbs, occasional starburst flares, fluorescent dye-like light bleed, subtle analog grain, gentle chromatic misregistration, and soft halation create layered cosmic depth.\n\nA calmer darker pocket of space is preserved behind the main typography for readability, while the brightest rainbow effects remain concentrated near the edges.\n\nLarge fluorescent hot-pink typography is placed as the frontmost top layer of the poster, floating over the finished image as a clean graphic overlay. The text must always appear in front of the legs and remain fully readable even where the composition overlaps visually.\n\nThe typography reads exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nEach word appears on its own line. The text is stacked vertically and arranged as a bold editorial design element along the left side and lower-left area of the frame, large and highly legible, in a bold retro display serif with broad sculptural curves and elegant curled terminals. The lettering is saturated fluorescent pink with subtle glow and crisp edges. All five words are correctly spelled, fully contained inside the frame, evenly spaced, and completely visible.\n\nThe legs may extend visually across the right side and slightly into the center of the composition, but the typography remains the topmost layer and is never blocked. The overall effect is a polished photorealistic fashion poster with dreamy synthwave energy, glossy neon lighting, cosmic depth, and bold foreground typography, while preserving the original diagonal pose and angle of the legs.",
+          "prompt": {
+            "source": "manual",
+            "manual_prompt": "A vertical photorealistic editorial poster composition with a deliberate layered graphic design. The final image is composed in three clear layers: a cosmic neon background in the back, a pair of feminine legs in the middle layer, and large fluorescent typography in the frontmost top layer. The typography must remain fully visible, unobstructed, and never hidden behind the legs or visual effects.\n\nOnly a pair of feminine legs and feet is visible, with the rest of the body completely offscreen beyond the upper-right edge. The pose closely follows a playful diagonal floating composition: the legs enter from the upper-right side of the frame and angle diagonally downward toward the lower-center area. Both knees are bent, with one knee higher and closer to the upper-right corner and the other leg slightly behind it. The lower portions of the legs descend through the center-right of the frame, and the feet angle downward with a soft pointed graceful pose. One foot extends lower toward the bottom-center-right, while the other remains slightly higher and tucked back. The silhouette should feel dynamic, weightless, and gently curled, preserving the original playful diagonal angle rather than a straight vertical hanging pose.\n\nThe legs wear white ribbed crew socks decorated with repeating red rose blossoms and small green leaves. The socks are clean, cute, and visually prominent, with realistic knit texture and a naturally fitted appearance around the ankles and feet. Subtle floral leg tattoos add personality and visual detail.\n\nSoft neutral studio lighting keeps the legs and socks sharply defined, while hot pink and electric cyan rim lighting traces their contours. The skin appears glossy and dimensional with realistic texture and gentle specular highlights.\n\nThe background is deep black and midnight blue with a dreamy cinematic 1980s synth-record atmosphere. Irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow glow around the outer borders. Long smeared rainbow refractions sweep through the upper-left and lower-right corners. Tiny stars, drifting particles, defocused colored light orbs, occasional starburst flares, fluorescent dye-like light bleed, subtle analog grain, gentle chromatic misregistration, and soft halation create layered cosmic depth.\n\nA calmer darker pocket of space is preserved behind the main typography for readability, while the brightest rainbow effects remain concentrated near the edges.\n\nLarge fluorescent hot-pink typography is placed as the frontmost top layer of the poster, floating over the finished image as a clean graphic overlay. The text must always appear in front of the legs and remain fully readable even where the composition overlaps visually.\n\nThe typography reads exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nEach word appears on its own line. The text is stacked vertically and arranged as a bold editorial design element along the left side and lower-left area of the frame, large and highly legible, in a bold retro display serif with broad sculptural curves and elegant curled terminals. The lettering is saturated fluorescent pink with subtle glow and crisp edges. All five words are correctly spelled, fully contained inside the frame, evenly spaced, and completely visible.\n\nThe legs may extend visually across the right side and slightly into the center of the composition, but the typography remains the topmost layer and is never blocked. The overall effect is a polished photorealistic fashion poster with dreamy synthwave energy, glossy neon lighting, cosmic depth, and bold foreground typography, while preserving the original diagonal pose and angle of the legs.",
+            "external_input": false
+          },
+          "outfit_a": {
+            "used": false,
+            "source": "log",
+            "placement": "token",
+            "action": "missing_placeholder",
+            "token": "OUTFIT",
+            "matched_tokens": [],
+            "file": "outfits/Creative Library/MASTER - Outfit Looks.txt",
+            "count": 16
+          },
+          "outfit_b": {
+            "used": false,
+            "source": "log",
+            "placement": "token",
+            "action": "missing_source",
+            "token": "OUTFIT_B",
+            "matched_tokens": []
+          },
+          "outfit_c": {
+            "used": false,
+            "source": "log",
+            "placement": "token",
+            "action": "missing_source",
+            "token": "OUTFIT_C",
+            "matched_tokens": []
+          },
+          "scene": {
+            "used": false,
+            "source": "manual",
+            "placement": "token",
+            "action": "missing_placeholder",
+            "token": "SCENE",
+            "matched_tokens": []
+          },
+          "trigger": {
+            "used": true,
+            "placement": "prepend",
+            "action": "prepend",
+            "token": "TRIGGER",
+            "matched_tokens": [],
+            "value": "80scomprint, A scan of a vintage ad from the 1980s",
+            "source": "loader"
+          },
+          "name": {
+            "used": false,
+            "token": "NAME",
+            "value": "print",
+            "matched_tokens": []
+          },
+          "item": {
+            "used": false,
+            "token": "BRAND",
+            "value": "rolenzio",
+            "matched_tokens": []
+          },
+          "prefix": {
+            "enabled": true,
+            "text": "frame from an old bootleg VHS ad infused with eerie analog warmth, purple color bleeding into the cursive red text overlay, rolling scan lines and soft degraded grain, building an intimate and seductively melancholic mood"
+          },
+          "suffix": {},
+          "separator": ", ",
+          "cleanup": {
+            "enabled": true
+          }
+        },
+        "so_prompt_dashboard_advanced": true,
+        "so_saved_source_prompt": "NAME, young tiefling woman photographed full body and barefoot beside a mossy woodland stream, wearing her original adventurer outfit with green cloak, brown fitted leather bodice, cream sleeves, dark navy wrap trousers, fingerless gloves, and a small magenta pouch. She stands upright with a serious direct gaze, arms relaxed beside her, her arrow-tipped tail curving clearly through the frame. Dappled forest light, wet rocks, ferns, moss, and moving water create a vivid natural environment.",
+        "so_saved_prompt_line": "NAME, young tiefling woman photographed full body and barefoot beside a mossy woodland stream, wearing her original adventurer outfit with green cloak, brown fitted leather bodice, cream sleeves, dark navy wrap trousers, fingerless gloves, and a small magenta pouch. She stands upright with a serious direct gaze, arms relaxed beside her, her arrow-tipped tail curving clearly through the frame. Dappled forest light, wet rocks, ferns, moss, and moving water create a vivid natural environment.",
+        "so_saved_outfit_line": "",
+        "so_saved_outfit_line_B": "",
+        "so_saved_outfit_line_C": "",
+        "so_saved_scene_line": "",
+        "so_trigger_connection_repaired": true,
+        "so_external_manual_prompt_value": "A vertical photorealistic composition featuring a pair of feminine legs entering playfully into the frame from the right side, with the rest of the body remaining fully offscreen beyond the edge. Only the legs and feet are visible. The legs extend diagonally into the composition in a relaxed, teasing pose, wearing white crew socks decorated with small red rose patterns and green leaves. The socks are clean, cute, and visually prominent, with the feet softly pointed and naturally posed. Subtle leg tattoos add personality and visual detail. Soft neutral studio lighting keeps the legs and socks sharply defined while hot-pink and electric-cyan edge lighting traces their contours. The surrounding space is deep black and midnight blue, filled with irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow. Smeared fluorescent ripples, defocused light orbs, tiny stars, drifting particles, and long rainbow glares create layered cosmic depth. The color becomes brighter around the outer borders while a calmer pocket of darkness surrounds the legs. Fine analog grain, fluorescent dye bleed, gentle chromatic misregistration, saturated neon color, and soft halation give the image the dreamy atmosphere of a rare 1980s synth record sleeve., Oversized display typography is integrated into the composition, reading exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nThe text is stacked vertically in five lines, set in a bold clean font, large and highly legible, placed along the left side of the frame as a strong graphic design element. The lettering feels intentional and editorial, harmonizing with the neon synth aesthetic"
+      },
+      "widgets_values": [
+        "manual",
+        "A vertical photorealistic editorial poster composition with a deliberate layered graphic design. The final image is composed in three clear layers: a cosmic neon background in the back, a pair of feminine legs in the middle layer, and large fluorescent typography in the frontmost top layer. The typography must remain fully visible, unobstructed, and never hidden behind the legs or visual effects.\n\nOnly a pair of feminine legs and feet is visible, with the rest of the body completely offscreen beyond the upper-right edge. The pose closely follows a playful diagonal floating composition: the legs enter from the upper-right side of the frame and angle diagonally downward toward the lower-center area. Both knees are bent, with one knee higher and closer to the upper-right corner and the other leg slightly behind it. The lower portions of the legs descend through the center-right of the frame, and the feet angle downward with a soft pointed graceful pose. One foot extends lower toward the bottom-center-right, while the other remains slightly higher and tucked back. The silhouette should feel dynamic, weightless, and gently curled, preserving the original playful diagonal angle rather than a straight vertical hanging pose.\n\nThe legs wear white ribbed crew socks decorated with repeating red rose blossoms and small green leaves. The socks are clean, cute, and visually prominent, with realistic knit texture and a naturally fitted appearance around the ankles and feet. Subtle floral leg tattoos add personality and visual detail.\n\nSoft neutral studio lighting keeps the legs and socks sharply defined, while hot pink and electric cyan rim lighting traces their contours. The skin appears glossy and dimensional with realistic texture and gentle specular highlights.\n\nThe background is deep black and midnight blue with a dreamy cinematic 1980s synth-record atmosphere. Irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow glow around the outer borders. Long smeared rainbow refractions sweep through the upper-left and lower-right corners. Tiny stars, drifting particles, defocused colored light orbs, occasional starburst flares, fluorescent dye-like light bleed, subtle analog grain, gentle chromatic misregistration, and soft halation create layered cosmic depth.\n\nA calmer darker pocket of space is preserved behind the main typography for readability, while the brightest rainbow effects remain concentrated near the edges.\n\nLarge fluorescent hot-pink typography is placed as the frontmost top layer of the poster, floating over the finished image as a clean graphic overlay. The text must always appear in front of the legs and remain fully readable even where the composition overlaps visually.\n\nThe typography reads exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nEach word appears on its own line. The text is stacked vertically and arranged as a bold editorial design element along the left side and lower-left area of the frame, large and highly legible, in a bold retro display serif with broad sculptural curves and elegant curled terminals. The lettering is saturated fluorescent pink with subtle glow and crisp edges. All five words are correctly spelled, fully contained inside the frame, evenly spaced, and completely visible.\n\nThe legs may extend visually across the right side and slightly into the center of the composition, but the typography remains the topmost layer and is never blocked. The overall effect is a polished photorealistic fashion poster with dreamy synthwave energy, glossy neon lighting, cosmic depth, and bold foreground typography, while preserving the original diagonal pose and angle of the legs.",
+        "[None]",
+        "fixed",
+        0,
+        "OUTFIT",
+        "token",
+        "outfits/Creative Library/MASTER - Outfit Looks.txt",
+        "fixed",
+        455510532,
+        "OUTFIT_B",
+        "token",
+        "[None]",
+        "randomize",
+        0,
+        "OUTFIT_C",
+        "token",
+        "[None]",
+        "randomize",
+        0,
+        "SCENE",
+        "token",
+        "scenes/Creative Library/MASTER - Scenes.txt",
+        "fixed",
+        806805903,
+        "NAME",
+        "Tiffany",
+        "BRAND",
+        "sick ollie",
+        true,
+        "frame from an old bootleg VHS ad infused with eerie analog warmth, purple color bleeding into the cursive red text overlay, rolling scan lines and soft degraded grain, building an intimate and seductively melancholic mood",
+        false,
+        "",
+        ", ",
+        true,
+        "\\?\\[|\\]\n\\\\?[()]\n:\\s*[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)",
+        "80scomprint, A scan of a vintage ad from the 1980s, frame from an old bootleg VHS ad infused with eerie analog warmth, purple color bleeding into the cursive red text overlay, rolling scan lines and soft degraded grain, building an intimate and seductively melancholic mood, A vertical photorealistic editorial poster composition with a deliberate layered graphic design. The final image is composed in three clear layers: a cosmic neon background in the back, a pair of feminine legs in the middle layer, and large fluorescent typography in the frontmost top layer. The typography must remain fully visible, unobstructed, and never hidden behind the legs or visual effects.\n\nOnly a pair of feminine legs and feet is visible, with the rest of the body completely offscreen beyond the upper-right edge. The pose closely follows a playful diagonal floating composition: the legs enter from the upper-right side of the frame and angle diagonally downward toward the lower-center area. Both knees are bent, with one knee higher and closer to the upper-right corner and the other leg slightly behind it. The lower portions of the legs descend through the center-right of the frame, and the feet angle downward with a soft pointed graceful pose. One foot extends lower toward the bottom-center-right, while the other remains slightly higher and tucked back. The silhouette should feel dynamic, weightless, and gently curled, preserving the original playful diagonal angle rather than a straight vertical hanging pose.\n\nThe legs wear white ribbed crew socks decorated with repeating red rose blossoms and small green leaves. The socks are clean, cute, and visually prominent, with realistic knit texture and a naturally fitted appearance around the ankles and feet. Subtle floral leg tattoos add personality and visual detail.\n\nSoft neutral studio lighting keeps the legs and socks sharply defined, while hot pink and electric cyan rim lighting traces their contours. The skin appears glossy and dimensional with realistic texture and gentle specular highlights.\n\nThe background is deep black and midnight blue with a dreamy cinematic 1980s synth-record atmosphere. Irregular pools of hot pink, cyan, cobalt, violet, orange, and yellow glow around the outer borders. Long smeared rainbow refractions sweep through the upper-left and lower-right corners. Tiny stars, drifting particles, defocused colored light orbs, occasional starburst flares, fluorescent dye-like light bleed, subtle analog grain, gentle chromatic misregistration, and soft halation create layered cosmic depth.\n\nA calmer darker pocket of space is preserved behind the main typography for readability, while the brightest rainbow effects remain concentrated near the edges.\n\nLarge fluorescent hot-pink typography is placed as the frontmost top layer of the poster, floating over the finished image as a clean graphic overlay. The text must always appear in front of the legs and remain fully readable even where the composition overlaps visually.\n\nThe typography reads exactly:\n\n\"sick\nollie\ncreator\nkit\nstudio\"\n\nEach word appears on its own line. The text is stacked vertically and arranged as a bold editorial design element along the left side and lower-left area of the frame, large and highly legible, in a bold retro display serif with broad sculptural curves and elegant curled terminals. The lettering is saturated fluorescent pink with subtle glow and crisp edges. All five words are correctly spelled, fully contained inside the frame, evenly spaced, and completely visible.\n\nThe legs may extend visually across the right side and slightly into the center of the composition, but the typography remains the topmost layer and is never blocked. The overall effect is a polished photorealistic fashion poster with dreamy synthwave energy, glossy neon lighting, cosmic depth, and bold foreground typography, while preserving the original diagonal pose and angle of the legs.",
+        "TRIGGER",
+        "prepend",
+        "",
+        "log",
+        "velvet dress",
+        "log",
+        "",
+        "log",
+        "",
+        "manual",
+        "the willow banks of Suzhou in spring haze, canals edged with drooping green branches and old bridges, soft diffused daylight, humid air, and a gentle silvery glow across the water"
+      ],
+      "color": "#1b1721",
+      "bgcolor": "#08070c",
+      "boxcolor": "#ff4ab8"
+    },
+    {
+      "id": 510,
+      "type": "SOLoaderCoreEngineStudio",
+      "pos": [
+        -450,
+        3730
+      ],
+      "size": [
+        820,
+        868
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "pos": [
+            820,
+            120
+          ],
+          "links": [
+            974
+          ]
+        },
+        {
+          "name": "clean_name",
+          "type": "STRING",
+          "pos": [
+            820,
+            141
+          ],
+          "links": [
+            994,
+            1011
+          ]
+        },
+        {
+          "name": "main_trigger",
+          "type": "STRING",
+          "pos": [
+            820,
+            162
+          ],
+          "links": []
+        },
+        {
+          "name": "main_folder",
+          "type": "STRING",
+          "pos": [
+            820,
+            183
+          ],
+          "links": [
+            1014
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SOLoaderCoreEngineStudio",
+        "so_loader_dashboard_version": 5,
+        "so_loader_shuffle_state": {
+          "key": "SickOllie\\characters\\prairie\\prairie_krea2_epoch_04.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_05.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_06.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_07.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_08.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_09.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_10.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_11.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_12.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_13.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_14.safetensors\u001fSickOllie\\characters\\prairie\\prairie_krea2_epoch_15.safetensors",
+          "remaining": [
+            "SickOllie\\characters\\prairie\\prairie_krea2_epoch_12.safetensors",
+            "SickOllie\\characters\\prairie\\prairie_krea2_epoch_07.safetensors",
+            "SickOllie\\characters\\prairie\\prairie_krea2_epoch_08.safetensors",
+            "SickOllie\\characters\\prairie\\prairie_krea2_epoch_14.safetensors",
+            "SickOllie\\characters\\prairie\\prairie_krea2_epoch_11.safetensors",
+            "SickOllie\\characters\\prairie\\prairie_krea2_epoch_10.safetensors",
+            "SickOllie\\characters\\prairie\\prairie_krea2_epoch_05.safetensors",
+            "SickOllie\\characters\\prairie\\prairie_krea2_epoch_13.safetensors",
+            "SickOllie\\characters\\prairie\\prairie_krea2_epoch_09.safetensors"
+          ],
+          "last": "SickOllie\\characters\\prairie\\prairie_krea2_epoch_06.safetensors"
+        },
+        "so_scrubbed_main_lora": "sicktype\\sicktype_krea2_variantA_sickollie.safetensors",
+        "so_loader_dashboard_advanced": false
+      },
+      "widgets_values": [
+        "SICK OLLIE_Krea2_FP8.safetensors",
+        "default",
+        "Other/Krea 2/Style/rolenzio",
+        "[All epochs]",
+        true,
+        "Other\\Krea 2\\Style\\rolenzio\\print.safetensors",
+        0.7,
+        true,
+        true,
+        "fixed",
+        true,
+        "no_lora",
+        true,
+        "1 · print",
+        "[All Library statuses]",
+        "Name",
+        "fixed",
+        "[{\"on\":true,\"lora\":\"SickOllie\\\\styles\\\\sicklight v2\\\\sicklight_krea2_v1_epoch_11.safetensors\",\"strength\":0.7},{\"on\":true,\"lora\":\"Other\\\\Krea 2\\\\Style\\\\patrik\\\\VHS_CORE.safetensors\",\"strength\":1},{\"on\":false,\"lora\":\"sicktype\\\\sicktype_krea2_variantB_sickollie.safetensors\",\"strength\":1.2},{\"on\":false,\"lora\":null,\"strength\":1},{\"on\":false,\"lora\":null,\"strength\":1},{\"on\":false,\"lora\":null,\"strength\":1},{\"on\":false,\"lora\":null,\"strength\":1},{\"on\":false,\"lora\":null,\"strength\":1},{\"on\":false,\"lora\":null,\"strength\":1},{\"on\":false,\"lora\":null,\"strength\":1}]"
+      ],
+      "color": "#1b1721",
+      "bgcolor": "#08070c",
+      "boxcolor": "#ff4ab8"
+    }
+  ],
+  "links": [
+    [
+      974,
+      510,
+      0,
+      512,
+      0,
+      "MODEL"
+    ],
+    [
+      975,
+      511,
+      0,
+      512,
+      1,
+      "STRING"
+    ],
+    [
+      976,
+      512,
+      0,
+      513,
+      3,
+      "LATENT"
+    ],
+    [
+      977,
+      512,
+      1,
+      513,
+      4,
+      "VAE"
+    ],
+    [
+      990,
+      513,
+      0,
+      518,
+      0,
+      "IMAGE"
+    ],
+    [
+      994,
+      510,
+      2,
+      511,
+      0,
+      "STRING"
+    ],
+    [
+      1011,
+      510,
+      1,
+      511,
+      2,
+      "STRING"
+    ],
+    [
+      1012,
+      527,
+      1,
+      511,
+      1,
+      "STRING"
+    ],
+    [
+      1014,
+      510,
+      3,
+      511,
+      3,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.5236552959426165,
+      "offset": [
+        2637.9649455828117,
+        -3174.499453074949
+      ]
+    },
+    "frontendVersion": "1.45.21",
+    "workflowRendererVersion": "LG",
+    "ue_links": [],
+    "links_added_by_ue": [],
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

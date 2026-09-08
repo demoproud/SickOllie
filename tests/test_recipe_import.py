@@ -221,5 +221,69 @@ class RecipeImportTests(unittest.TestCase):
         self.assertIn("generation.seed_value", reason)
 
 
+    def test_swarmui_json_parameters_import_prompt_seed_dimensions_model_and_lora(self) -> None:
+        parameters = {
+            "sui_image_params": {
+                "prompt": "photo of a woman throwing a snowball",
+                "negativeprompt": "",
+                "model": "sickOllie_krea2",
+                "seed": 1470511895,
+                "steps": 10,
+                "cfgscale": 1.0,
+                "width": 896,
+                "height": 1152,
+                "sampler": "euler",
+                "scheduler": "beta",
+                "loras": ["dr0salise_krea2_v1"],
+                "loraweights": ["1"],
+            },
+            "sui_models": [
+                {"name": "sickOllie_krea2.safetensors", "param": "model", "hash": "0xmodel"},
+                {"name": "dr0salise_krea2_v1.safetensors", "param": "loras", "hash": "0xlora"},
+            ],
+        }
+        info = PngImagePlugin.PngInfo()
+        info.add_text("parameters", json.dumps(parameters))
+        buffer = BytesIO()
+        Image.new("RGB", (896, 1152), "white").save(buffer, "PNG", pnginfo=info)
+
+        recipe, preview = recipe_module._recipe_from_image_bytes(buffer.getvalue())
+        self.assertEqual(preview.size, (896, 1152))
+        prompt = recipe_module._recipe_node_values(recipe, recipe_module.STUDIO_PROMPT)
+        generation = recipe_module._recipe_node_values(recipe, recipe_module.STUDIO_GENERATION)
+        loader = recipe_module._recipe_node_values(recipe, recipe_module.STUDIO_LOADER, include_optional=True)
+        self.assertEqual(prompt.get("manual_prompt"), "photo of a woman throwing a snowball")
+        self.assertEqual(generation.get("seed_value"), 1470511895)
+        self.assertEqual((generation.get("custom_width"), generation.get("custom_height")), (896, 1152))
+        self.assertEqual(loader.get("diffusion_model"), "sickOllie_krea2.safetensors")
+        self.assertEqual(loader.get("main_lora"), "dr0salise_krea2_v1.safetensors")
+
+    def test_jpeg_exif_usercomment_import_uses_same_metadata_pipeline(self) -> None:
+        metadata = {
+            "parameters": json.dumps({
+                "sui_image_params": {
+                    "prompt": "editorial portrait in winter sunlight",
+                    "seed": 424242,
+                    "steps": 8,
+                    "cfgscale": 1.0,
+                    "width": 640,
+                    "height": 960,
+                    "model": "test_model",
+                }
+            })
+        }
+        exif = Image.Exif()
+        exif[0x9286] = json.dumps(metadata)
+        buffer = BytesIO()
+        Image.new("RGB", (640, 960), "white").save(buffer, "JPEG", exif=exif)
+
+        recipe, preview = recipe_module._recipe_from_image_bytes(buffer.getvalue())
+        self.assertEqual(preview.size, (640, 960))
+        prompt = recipe_module._recipe_node_values(recipe, recipe_module.STUDIO_PROMPT)
+        generation = recipe_module._recipe_node_values(recipe, recipe_module.STUDIO_GENERATION)
+        self.assertEqual(prompt.get("manual_prompt"), "editorial portrait in winter sunlight")
+        self.assertEqual(generation.get("seed_value"), 424242)
+
+
 if __name__ == "__main__":
     unittest.main()

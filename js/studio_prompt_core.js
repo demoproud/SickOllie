@@ -8,11 +8,15 @@ import {
 } from "./studio_theme.js";
 
 const TARGET = "SOPromptLogEngineStudio";
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 16;
 const NO_FILE = "[None]";
+const OUTFIT_COLLECTION_SCOPE_PREFIX = "[Outfit Looks Collection:";
+const WARDROBE_COLLECTION_SCOPE_PREFIX = "[Wardrobe Collection:";
+const SCENE_COLLECTION_SCOPE_PREFIX = "[Scene Collection:";
 const LARGE_RANDOM_MAX = 1000000000;
 const MODES = ["fixed", "increment", "decrement", "randomize", "shuffle"];
 const PLACEMENTS = ["smart", "token", "append", "prepend", "off"];
+const MAIN_PROMPT_SOURCES = ["manual", "input", "log"];
 
 const DEFAULT_CLEANUP = String.raw`\?\[|\]
 \\?[()]
@@ -59,12 +63,53 @@ const DEFAULTS = {
     trigger_token: "TRIGGER",
     trigger_placement: "off",
     trigger_override: "",
+    outfit_source_A: "log",
+    outfit_manual_A: "",
+    outfit_source_B: "log",
+    outfit_manual_B: "",
+    outfit_source_C: "log",
+    outfit_manual_C: "",
+    scene_source: "log",
+    scene_manual: "",
 };
 
 const CANONICAL_NAMES = Object.keys(DEFAULTS);
 
-const LEGACY_V10_NAMES = CANONICAL_NAMES.filter((name) => !name.includes("_placement") && !name.startsWith("trigger_"));
-const V11_NAMES = CANONICAL_NAMES.filter((name) => !name.startsWith("trigger_"));
+function canonicalCreativeLibraryLogReference(value, category = "") {
+    const clean = String(value ?? "").trim().replaceAll("\\", "/");
+    if (!clean || clean === NO_FILE) return clean;
+    const parts = clean.split("/");
+    const inferred = { prompts: "prompt", outfits: "outfit", scenes: "scene" }[String(parts[0] || "").toLowerCase()] || "";
+    const kind = String(category || inferred).toLowerCase();
+    if (parts.length < 2 || String(parts[1]).toLowerCase() !== "recipe library") return clean;
+    parts[1] = "Creative Library";
+    if (kind === "prompt" && String(parts[2] || "").toLowerCase() === "master - all recipe prompts.txt") parts[2] = "MASTER - Saved Recipe Prompts.txt";
+    else if (kind === "prompt" && String(parts[2] || "").toLowerCase() === "collections") parts[2] = "Saved Recipe Collections";
+    else if (kind === "outfit" && String(parts[2] || "").toLowerCase() === "master - resolved recipe outfits.txt") parts[2] = "MASTER - Outfit Looks.txt";
+    else if (kind === "scene" && String(parts[2] || "").toLowerCase() === "master - resolved recipe scenes.txt") parts[2] = "MASTER - Scenes.txt";
+    return parts.join("/");
+}
+
+function canonicalizeLogWidgetValues(values) {
+    const output = [...values];
+    for (const [name, category] of [
+        ["prompt_log_file", "prompt"], ["outfit_log_file_A", "outfit"], ["outfit_log_file_B", "outfit"],
+        ["outfit_log_file_C", "outfit"], ["scene_log_file", "scene"],
+    ]) {
+        const index = CANONICAL_NAMES.indexOf(name);
+        if (index >= 0) output[index] = canonicalCreativeLibraryLogReference(output[index], category);
+    }
+    return output;
+}
+const COMPONENT_SOURCE_NAMES = [
+    "outfit_source_A", "outfit_manual_A",
+    "outfit_source_B", "outfit_manual_B",
+    "outfit_source_C", "outfit_manual_C",
+    "scene_source", "scene_manual",
+];
+const V13_NAMES = CANONICAL_NAMES.filter((name) => !COMPONENT_SOURCE_NAMES.includes(name));
+const LEGACY_V10_NAMES = V13_NAMES.filter((name) => !name.includes("_placement") && !name.startsWith("trigger_"));
+const V11_NAMES = V13_NAMES.filter((name) => !name.startsWith("trigger_"));
 const LEGACY_PLACEMENTS = {
     outfit_placement_A: "token",
     outfit_placement_B: "token",
@@ -142,6 +187,24 @@ function legacyCanonicalValues(overrides = {}) {
     return canonicalValues({ ...LEGACY_PLACEMENTS, ...overrides });
 }
 
+function workflowInputConnected(info, name) {
+    const input = (info?.inputs || []).find((slot) => String(slot?.widget?.name ?? slot?.name ?? "") === String(name));
+    return Boolean(input && (input.link != null || (Array.isArray(input.links) && input.links.length)));
+}
+
+function upgradeDedicatedPromptInputSource(info, widgetsValues) {
+    const output = [...widgetsValues];
+    const sourceIndex = CANONICAL_NAMES.indexOf("prompt_source");
+    const previousSchema = Number(info?.properties?.so_prompt_core_schema_version || 0);
+    // Before schema 16, a connected Prompt input forcibly masqueraded as Manual.
+    // Preserve that old behavior exactly once by migrating connected workflows
+    // to the new dedicated Input source. After that, Manual stays truly manual.
+    if (previousSchema < 16 && sourceIndex >= 0 && String(output[sourceIndex] ?? "manual") === "manual" && workflowInputConnected(info, "manual_prompt_input")) {
+        output[sourceIndex] = "input";
+    }
+    return output;
+}
+
 function withSchema(info, widgetsValues) {
     return {
         ...info,
@@ -149,7 +212,7 @@ function withSchema(info, widgetsValues) {
             ...(info?.properties || {}),
             so_prompt_core_schema_version: SCHEMA_VERSION,
         },
-        widgets_values: widgetsValues,
+        widgets_values: canonicalizeLogWidgetValues(upgradeDedicatedPromptInputSource(info, widgetsValues)),
     };
 }
 
@@ -312,14 +375,21 @@ function migratePromptWorkflow(info) {
         return info;
     }
 
+    if (values.length === V13_NAMES.length) {
+        const restored = {};
+        V13_NAMES.forEach((name, index) => { restored[name] = values[index]; });
+        return withSchema(info, canonicalValues(restored));
+    }
+
     if (values.length === LEGACY_V10_NAMES.length) {
         const restored = {};
         LEGACY_V10_NAMES.forEach((name, index) => { restored[name] = values[index]; });
         return withSchema(info, legacyCanonicalValues(restored));
     }
 
-    // v11 was the first Studio placement build. v12 only appends the three
-    // trigger widgets, so preserve every existing value and fill those safely.
+    // v11 was the first Studio placement build. Later versions appended the
+    // trigger controls and then the manual Outfit/Scene source controls, so
+    // preserve every older value and fill only the new channels safely.
     if (values.length === V11_NAMES.length) {
         const restored = {};
         V11_NAMES.forEach((name, index) => { restored[name] = values[index]; });
@@ -488,6 +558,27 @@ function streamPlacementWidget(base) {
     return "";
 }
 
+function streamSourceWidget(base) {
+    if (base === "outfit_A") return "outfit_source_A";
+    if (base === "outfit_B") return "outfit_source_B";
+    if (base === "outfit_C") return "outfit_source_C";
+    if (base === "scene") return "scene_source";
+    return "";
+}
+
+function streamManualWidget(base) {
+    if (base === "outfit_A") return "outfit_manual_A";
+    if (base === "outfit_B") return "outfit_manual_B";
+    if (base === "outfit_C") return "outfit_manual_C";
+    if (base === "scene") return "scene_manual";
+    return "";
+}
+
+function streamUsesManualSource(node, base) {
+    const sourceName = streamSourceWidget(base);
+    return Boolean(sourceName) && String(widget(node, sourceName)?.value ?? "log") === "manual";
+}
+
 function tokenCandidates(configuredToken, ...standardAliases) {
     const values = [];
     const add = (raw) => {
@@ -647,29 +738,50 @@ async function refreshStreamLines(node, base, force = false) {
 }
 
 function activeSourceTemplate(node) {
-    if (String(widget(node, "prompt_source")?.value ?? "manual") !== "log") {
-        return String(widget(node, "manual_prompt")?.value ?? "");
-    }
+    const source = String(widget(node, "prompt_source")?.value ?? "manual");
+    if (source === "input") return externalManualPromptState(node).value;
+    if (source !== "log") return String(widget(node, "manual_prompt")?.value ?? "");
     const lines = node.__soLogLines?.prompt || [];
     if (!lines.length) return "";
     const index = normalizedIndex(widget(node, "prompt_index")?.value, lines.length);
     return String(lines[index] ?? "");
 }
 
+// Prefix and suffix belong to the template before placeholder resolution.
+// Keep the frontend participation checks in the same order as the backend so
+// a token introduced by an affix (for example SCENE on a read-only log) is
+// treated as genuinely used for status, shuffle, increment, decrement, and randomize.
+function activeAssembledTemplate(node) {
+    const separator = String(widget(node, "prefix_suffix_separator")?.value ?? ", ");
+    return [
+        Boolean(widget(node, "prefix_enabled")?.value) ? promptConnectedOrWidgetValue(node, "prefix_text", "prefix") : "",
+        activeSourceTemplate(node),
+        Boolean(widget(node, "suffix_enabled")?.value) ? promptConnectedOrWidgetValue(node, "suffix_text", "suffix") : "",
+    ].map((part) => String(part ?? "").trim()).filter(Boolean).join(separator);
+}
+
 function streamAssemblyState(node, base) {
     if (base === "prompt") {
-        const used = String(widget(node, "prompt_source")?.value ?? "manual") === "log";
-        return { used, action: used ? "log" : "manual", label: used ? "Prompt Log" : "Manual", tone: "active", matches: [] };
+        const source = String(widget(node, "prompt_source")?.value ?? "manual");
+        return {
+            used: source === "log",
+            action: source,
+            label: source === "log" ? "Prompt Log" : (source === "input" ? "Prompt Input" : "Manual"),
+            tone: "active",
+            matches: [],
+        };
     }
     const [fileName] = streamConfig(base);
     const placementName = streamPlacementWidget(base);
     const placement = String(widget(node, placementName)?.value ?? "token");
+    const manualSource = streamUsesManualSource(node, base);
+    const manualValue = String(widget(node, streamManualWidget(base))?.value ?? "").trim();
     const fileValue = String(widget(node, fileName)?.value ?? NO_FILE);
     const fileSelected = Boolean(fileValue && fileValue !== NO_FILE);
     const lines = node.__soLogLines?.[base] || [];
     const loadedFile = String(node.__soLogLineFiles?.[base] ?? "");
     const loading = fileSelected && loadedFile !== fileValue;
-    const matches = aliasesInText(activeSourceTemplate(node), streamTokenCandidates(node, base));
+    const matches = aliasesInText(activeAssembledTemplate(node), streamTokenCandidates(node, base));
     const firstMatch = matches[0] || "";
 
     if (placement === "off") {
@@ -681,7 +793,16 @@ function streamAssemblyState(node, base) {
             matches,
         };
     }
-    if (!fileSelected) {
+    if (manualSource && !manualValue) {
+        return {
+            used: false,
+            action: "missing_source",
+            label: firstMatch ? `${firstMatch} found · enter value` : "Enter manual value",
+            tone: "warning",
+            matches,
+        };
+    }
+    if (!manualSource && !fileSelected) {
         return {
             used: false,
             action: "missing_source",
@@ -690,17 +811,17 @@ function streamAssemblyState(node, base) {
             matches,
         };
     }
-    if (loading) return { used: false, action: "loading", label: "Loading log…", tone: "warning", matches };
-    if (!lines.length) return { used: false, action: "missing_source", label: "Log has no usable lines", tone: "warning", matches };
+    if (!manualSource && loading) return { used: false, action: "loading", label: "Loading log…", tone: "warning", matches };
+    if (!manualSource && !lines.length) return { used: false, action: "missing_source", label: "Log has no usable lines", tone: "warning", matches };
     if (placement === "token") {
         return matches.length
-            ? { used: true, action: "replace", label: `Replace ${firstMatch}`, tone: "active", matches }
+            ? { used: true, action: "replace", label: `${manualSource ? "Manual · " : ""}replace ${firstMatch}`, tone: "active", matches }
             : { used: false, action: "missing_placeholder", label: "Waiting for placeholder", tone: "warning", matches };
     }
     if (placement === "smart") {
         return matches.length
-            ? { used: true, action: "replace", label: `Auto · replace ${firstMatch}`, tone: "active", matches }
-            : { used: true, action: "append", label: "Auto · append", tone: "active", matches };
+            ? { used: true, action: "replace", label: `${manualSource ? "Manual · " : "Auto · "}replace ${firstMatch}`, tone: "active", matches }
+            : { used: true, action: "append", label: `${manualSource ? "Manual · " : "Auto · "}append`, tone: "active", matches };
     }
     if (placement === "prepend") return { used: true, action: "prepend", label: "Prepend", tone: "active", matches };
     return { used: true, action: "append", label: "Append", tone: "active", matches };
@@ -817,6 +938,49 @@ function logBrowserLabel(base) {
     return "Scene Log";
 }
 
+function collectionLogScopeId(value) {
+    const text = String(value ?? "").trim();
+    for (const [source, prefix] of [
+        ["outfit", OUTFIT_COLLECTION_SCOPE_PREFIX],
+        ["wardrobe", WARDROBE_COLLECTION_SCOPE_PREFIX],
+        ["scene", SCENE_COLLECTION_SCOPE_PREFIX],
+    ]) {
+        if (text.startsWith(prefix) && text.endsWith("]")) {
+            return { source, collection_id: text.slice(prefix.length, -1).trim() };
+        }
+    }
+    return null;
+}
+
+function collectionLogScopes(node, base) {
+    return Array.isArray(node?.__soLogCollections?.[base]) ? node.__soLogCollections[base] : [];
+}
+
+function collectionLogScope(node, base, value) {
+    const wanted = String(value ?? "");
+    return collectionLogScopes(node, base).find((scope) => String(scope?.reference ?? "") === wanted) || null;
+}
+
+function collectionLogSourceLabel(source) {
+    if (source === "wardrobe") return "Wardrobe";
+    if (source === "scene") return "Scenes";
+    return "Looks";
+}
+
+function collectionLogDisplay(node, base, value) {
+    const scope = collectionLogScope(node, base, value);
+    if (scope) return `◆ ${collectionLogSourceLabel(scope.source)} · ${scope.name || "Collection"}`;
+    const parsed = collectionLogScopeId(value);
+    if (!parsed) return "";
+    return `◆ ${collectionLogSourceLabel(parsed.source)} Collection`;
+}
+
+function collectionLogRowLabel(scope) {
+    const count = Math.max(0, Number(scope?.asset_count || 0));
+    const noun = scope?.source === "wardrobe" ? "items" : scope?.source === "scene" ? "scenes" : "looks";
+    return `${collectionLogSourceLabel(scope?.source)} · ${scope?.name || "Collection"} · ${count.toLocaleString()} ${noun}`;
+}
+
 function logRelativeFile(base, fileValue) {
     const value = String(fileValue ?? NO_FILE).replaceAll("\\", "/").replace(/^\/+|\/+$/g, "");
     if (!value || value === NO_FILE) return "";
@@ -826,6 +990,7 @@ function logRelativeFile(base, fileValue) {
 }
 
 function logFolderForFile(base, fileValue) {
+    if (collectionLogScopeId(fileValue)) return "";
     const relative = logRelativeFile(base, fileValue);
     if (!relative) return "";
     const slash = relative.lastIndexOf("/");
@@ -835,6 +1000,8 @@ function logFolderForFile(base, fileValue) {
 function logBrowserButtonText(node, base) {
     const [fileName] = streamConfig(base);
     const selected = String(widget(node, fileName)?.value ?? NO_FILE);
+    const collection = collectionLogDisplay(node, base, selected);
+    if (collection) return `◆ ${logBrowserLabel(base)}   ${collection.replace(/^◆\s*/, "")}`;
     const relative = logRelativeFile(base, selected);
     return relative
         ? `📄 ${logBrowserLabel(base)}   ${relative}`
@@ -850,6 +1017,36 @@ function allLogFiles(node, base) {
     return node.__soAllLogFiles[base] || [];
 }
 
+async function refreshAvailableLogFiles(node, base) {
+    const category = base === "prompt" ? "prompt" : base.startsWith("outfit_") ? "outfit" : "scene";
+    try {
+        const response = await fetch(`/sickollie/studio/prompt-core/log-files?category=${encodeURIComponent(category)}`);
+        if (!response.ok) return allLogFiles(node, base);
+        const payload = await response.json();
+        const values = Array.isArray(payload?.files) ? payload.files.map(String) : [];
+        node.__soLogCollections = node.__soLogCollections || {};
+        node.__soLogCollections[base] = Array.isArray(payload?.collections)
+            ? payload.collections.map((scope) => ({
+                reference: String(scope?.reference ?? ""),
+                collection_id: String(scope?.collection_id ?? ""),
+                name: String(scope?.name ?? "Collection"),
+                source: String(scope?.source ?? ""),
+                asset_count: Math.max(0, Number(scope?.asset_count || 0)),
+            })).filter((scope) => scope.reference)
+            : [];
+        if (!values.length) return allLogFiles(node, base);
+        const [fileName] = streamConfig(base);
+        const fileWidget = widget(node, fileName);
+        writeValues(fileWidget, values);
+        node.__soAllLogFiles = node.__soAllLogFiles || {};
+        node.__soAllLogFiles[base] = [...values];
+        return values;
+    } catch (error) {
+        console.warn("[Sick Ollie Prompt Core] Could not refresh log file list", error);
+        return allLogFiles(node, base);
+    }
+}
+
 function healMissingLogSelection(node, base) {
     const [fileName, , indexName] = streamConfig(base);
     const fileWidget = widget(node, fileName);
@@ -861,6 +1058,12 @@ function healMissingLogSelection(node, base) {
     // workflow/image can legitimately reference a file that was renamed, moved,
     // or deleted. Do not let that dormant value poison Comfy's queue validation.
     const available = readValues(fileWidget).map((value) => String(value));
+    const category = base === "prompt" ? "prompt" : base.startsWith("outfit_") ? "outfit" : "scene";
+    const canonical = canonicalCreativeLibraryLogReference(current, category);
+    if (canonical !== current && available.includes(canonical)) {
+        fileWidget.value = canonical;
+        return true;
+    }
     if (!available.length || available.includes(current)) return false;
 
     console.warn(`[Sick Ollie Prompt Core] Missing ${base} log was cleared: ${current}`);
@@ -1031,12 +1234,12 @@ function promptBrowserShell(base, folder, onSearch) {
 
 function promptBrowserRow(list, label, kind, callback, hint = "") {
     const row = document.createElement("div");
-    const icon = kind === "folder" ? "📁  " : "";
+    const icon = kind === "folder" ? "📁  " : kind === "collection" ? "◆  " : "";
     row.textContent = `${icon}${label}`;
     Object.assign(row.style, {
         padding: "7px 12px", cursor: "pointer", borderBottom: "1px solid #242424",
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        color: kind === "action" ? "#ccc" : "#f4f4f4",
+        color: kind === "action" ? "#ccc" : kind === "collection" ? "#fff6a8" : "#f4f4f4",
     });
     if (hint) row.title = hint;
     row.addEventListener("mouseenter", () => row.style.background = "rgba(53,215,255,.10)");
@@ -1045,6 +1248,17 @@ function promptBrowserRow(list, label, kind, callback, hint = "") {
         event.preventDefault();
         event.stopPropagation();
         callback();
+    });
+    list.append(row);
+    return row;
+}
+
+function promptBrowserSection(list, label) {
+    const row = document.createElement("div");
+    row.textContent = String(label || "").toUpperCase();
+    Object.assign(row.style, {
+        padding: "7px 12px 4px", color: "#8c8492", font: "800 9px Segoe UI, Arial",
+        letterSpacing: ".10em", pointerEvents: "none",
     });
     list.append(row);
     return row;
@@ -1081,6 +1295,9 @@ function renderPromptLogBrowser(node, base, shell, query = "") {
     const q = String(query ?? "").trim().toLowerCase();
 
     if (q) {
+        const collectionHits = collectionLogScopes(node, base).filter((scope) =>
+            `${scope?.name || ""} ${collectionLogSourceLabel(scope?.source)}`.toLowerCase().includes(q)
+        );
         const folderSet = new Set();
         const fileHits = [];
         for (const fullValue of allLogFiles(node, base)) {
@@ -1095,7 +1312,17 @@ function renderPromptLogBrowser(node, base, shell, query = "") {
             }
             if (relative.toLowerCase().includes(q)) fileHits.push(full);
         }
+        if (collectionHits.length) {
+            promptBrowserSection(shell.list, "Collections");
+            for (const scope of collectionHits.slice(0, 80)) {
+                promptBrowserRow(shell.list, collectionLogRowLabel(scope), "collection", () => {
+                    selectLogFile(node, base, scope.reference);
+                    closePromptLogBrowser();
+                }, scope.reference);
+            }
+        }
         const folderHits = [...folderSet].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })).slice(0, 120);
+        if (collectionHits.length && (folderHits.length || fileHits.length)) promptBrowserDivider(shell.list);
         for (const path of folderHits) {
             promptBrowserRow(shell.list, path, "folder", () => {
                 node.__soLogBrowseFolders[base] = path;
@@ -1111,7 +1338,7 @@ function renderPromptLogBrowser(node, base, shell, query = "") {
                 closePromptLogBrowser();
             }, full);
         }
-        if (!folderHits.length && !fileHits.length) promptBrowserRow(shell.list, "No matches", "action", () => {});
+        if (!collectionHits.length && !folderHits.length && !fileHits.length) promptBrowserRow(shell.list, "No matches", "action", () => {});
         return;
     }
 
@@ -1119,6 +1346,17 @@ function renderPromptLogBrowser(node, base, shell, query = "") {
         selectLogFile(node, base, NO_FILE);
         closePromptLogBrowser();
     });
+    const collections = collectionLogScopes(node, base);
+    if (collections.length) {
+        promptBrowserSection(shell.list, "Collections");
+        for (const scope of collections) {
+            promptBrowserRow(shell.list, collectionLogRowLabel(scope), "collection", () => {
+                selectLogFile(node, base, scope.reference);
+                closePromptLogBrowser();
+            }, scope.reference);
+        }
+        promptBrowserDivider(shell.list);
+    }
     if (folder) {
         promptBrowserRow(shell.list, "↑ Parent Folder", "action", () => {
             const slash = folder.lastIndexOf("/");
@@ -1155,11 +1393,13 @@ function renderPromptLogBrowser(node, base, shell, query = "") {
     if (!children.length && !files.length) promptBrowserRow(shell.list, "No folders or .txt files here", "action", () => {});
 }
 
-function openPromptLogBrowser(node, base) {
+async function openPromptLogBrowser(node, base) {
     ensurePromptBrowserPointerTracker();
+    await refreshAvailableLogFiles(node, base);
     node.__soLogBrowseFolders = node.__soLogBrowseFolders || {};
     const [fileName] = streamConfig(base);
     const selected = String(widget(node, fileName)?.value ?? NO_FILE);
+    if (collectionLogScopeId(selected)) await refreshStreamLines(node, base, true);
     if (selected !== NO_FILE) node.__soLogBrowseFolders[base] = logFolderForFile(base, selected);
     if (!Object.prototype.hasOwnProperty.call(node.__soLogBrowseFolders, base)) node.__soLogBrowseFolders[base] = "";
 
@@ -1250,7 +1490,44 @@ function bindLogControls(node) {
             };
         }
         refreshStreamLines(node, base, false);
+        if (base !== "prompt") {
+            void refreshAvailableLogFiles(node, base).then(() => {
+                refreshLogBrowserButton(node, base);
+                node.setDirtyCanvas?.(true, true);
+            });
+        }
     }
+}
+
+async function refreshCollectionBackedStreams(kind = "") {
+    const cleanKind = String(kind || "").toLowerCase();
+    const bases = cleanKind === "scene"
+        ? ["scene"]
+        : cleanKind === "outfit" || cleanKind === "wardrobe"
+            ? ["outfit_A", "outfit_B", "outfit_C"]
+            : ["outfit_A", "outfit_B", "outfit_C", "scene"];
+    for (const node of app.graph?._nodes || []) {
+        if (node?.type !== TARGET && node?.comfyClass !== TARGET) continue;
+        for (const base of bases) {
+            await refreshAvailableLogFiles(node, base);
+            healMissingLogSelection(node, base);
+            refreshLogBrowserButton(node, base);
+            const [fileName] = streamConfig(base);
+            const selected = String(widget(node, fileName)?.value ?? NO_FILE);
+            const parsed = collectionLogScopeId(selected);
+            if (!parsed) continue;
+            if (cleanKind && parsed.source !== cleanKind) continue;
+            await refreshStreamLines(node, base, true);
+        }
+        node.setDirtyCanvas?.(true, true);
+    }
+}
+
+if (typeof window !== "undefined" && !window.__soPromptCollectionRefreshBound) {
+    window.__soPromptCollectionRefreshBound = true;
+    window.addEventListener("sickollie:library-collections-changed", (event) => {
+        void refreshCollectionBackedStreams(event?.detail?.kind || "");
+    });
 }
 
 function streamConfig(base) {
@@ -1264,6 +1541,7 @@ function streamConfig(base) {
 function advanceStream(node, base) {
     const [fileName, modeName, indexName] = streamConfig(base);
     if (base === "prompt" && String(widget(node, "prompt_source")?.value) !== "log") return;
+    if (base !== "prompt" && streamUsesManualSource(node, base)) return;
     if (String(widget(node, fileName)?.value ?? NO_FILE) === NO_FILE) return;
     // Components advance only when they actually participate. Smart append,
     // explicit append/prepend, and matched placeholders all count as used.
@@ -1316,13 +1594,16 @@ function bindQueueProgression(node) {
 }
 
 
-const PROMPT_DASH_VERSION = 7;
+const PROMPT_DASH_VERSION = 10;
 const PROMPT_DASH_MIN_WIDTH = STUDIO_LAYOUT.minWidth;
 const PROMPT_DASH_PAD = STUDIO_LAYOUT.pad;
 const PROMPT_DASH_GAP = STUDIO_LAYOUT.gap;
 const PROMPT_DASH_ROW_H = STUDIO_LAYOUT.rowHeight;
 const PROMPT_SECTION_GAP = STUDIO_LAYOUT.sectionGap + 8;
 const PROMPT_LOG_BOTTOM_PAD = 24;
+const PROMPT_LIBRARY_HEIGHT = 60;
+const PROMPT_LIBRARY_TOP_PAD = 12;
+const PROMPT_LIBRARY_BOTTOM_PAD = 24;
 const PROMPT_SOURCE_FRAME_BOTTOM_GAP = 6;
 const PROMPT_DASH_COLLAPSED_H = 1275;
 const PROMPT_DASH_EXPANDED_H = 1365;
@@ -1367,7 +1648,10 @@ function promptOutputBottom(node) {
         : STUDIO_LAYOUT.headerHeight;
 }
 
+const PROMPT_FORCE_INPUT_NAMES = ["main_trigger", "manual_prompt_input"];
+
 const PROMPT_VISIBLE_INPUT_NAMES = [
+    "manual_prompt_input",
     "name_value",
     "item_value",
     "prefix_text",
@@ -1390,7 +1674,7 @@ function promptShouldExposeInput(input) {
 function promptExternalInputs(node) {
     return (node.inputs || []).filter((input) => {
         const name = promptInputName(input);
-        return Boolean(name) && (CANONICAL_NAMES.includes(name) || name === "main_trigger") && promptShouldExposeInput(input);
+        return Boolean(name) && (CANONICAL_NAMES.includes(name) || PROMPT_FORCE_INPUT_NAMES.includes(name)) && promptShouldExposeInput(input);
     });
 }
 
@@ -1410,6 +1694,7 @@ function promptExternalInputLabel(node, name) {
         prefix_text: "Prefix text",
         suffix_text: "Suffix text",
         main_trigger: "TRIGGER value",
+        manual_prompt_input: "Prompt input · final/source",
     };
     return labels[name] || String(name || "Input").replaceAll("_", " ");
 }
@@ -1420,7 +1705,7 @@ function layoutPromptInputSockets(node) {
     let y = STUDIO_LAYOUT.socketStart;
     for (const input of node.inputs || []) {
         const name = promptInputName(input);
-        if (!name || !(CANONICAL_NAMES.includes(name) || name === "main_trigger")) continue;
+        if (!name || !(CANONICAL_NAMES.includes(name) || PROMPT_FORCE_INPUT_NAMES.includes(name))) continue;
         if (promptShouldExposeInput(input)) {
             node.__soPromptInputAnchors[name] = y;
             node.__soPromptExternalInputAnchors[name] = y;
@@ -1430,7 +1715,7 @@ function layoutPromptInputSockets(node) {
             // native text to avoid the doubled raw "main_trigger" / dashboard label ghosting.
             // A single space is intentional: LiteGraph falls back to input.name when
             // label is an empty string, which is why main_trigger still appeared.
-            input.label = name === "main_trigger" ? " " : promptExternalInputLabel(node, name);
+            input.label = PROMPT_FORCE_INPUT_NAMES.includes(name) ? " " : promptExternalInputLabel(node, name);
             input.color_on = SO_CMYKG.green;
             input.color_off = "#7f8792";
             y += 21;
@@ -1453,7 +1738,8 @@ function promptInputSocketsBottom(node) {
 }
 
 function promptSourceTop(node) {
-    return Math.max(promptOutputBottom(node), promptInputSocketsBottom(node)) + STUDIO_LAYOUT.socketGap;
+    return Math.max(promptOutputBottom(node), promptInputSocketsBottom(node)) + STUDIO_LAYOUT.socketGap
+        + PROMPT_LIBRARY_TOP_PAD + PROMPT_LIBRARY_HEIGHT + PROMPT_LIBRARY_BOTTOM_PAD;
 }
 
 function promptSourceHeight(node) {
@@ -1586,7 +1872,67 @@ function promptConnectedSource(node, inputName) {
         output: outputLabel,
         outputName,
         outputIndex: Number(link.origin_slot),
+        input,
+        inputIndex: Number(node.inputs?.indexOf(input) ?? -1),
+        link,
+        linkId: reference && typeof reference === "object" ? (reference.id ?? reference) : reference,
     };
+}
+
+function loaderTriggerOutputIndex(loader) {
+    return (loader?.outputs || []).findIndex((output) =>
+        [output?.name, output?.label].some((value) => String(value ?? "").trim() === "main_trigger")
+    );
+}
+
+function samePromptLink(left, right) {
+    if (left === right) return true;
+    if (left == null || right == null) return false;
+    return String(left) === String(right);
+}
+
+/**
+ * Early Studio workflows connected Prompt Core's trigger socket to Loader
+ * Core's clean_name output because main_trigger did not exist yet.  Once the
+ * dedicated output was added, LiteGraph correctly preserved the old slot
+ * number -- but that meant the backend continued receiving only values such
+ * as "jester" while Loader Core's UI showed the full saved override.
+ *
+ * Repair only this unambiguous Loader Core case.  Arbitrary STRING sources are
+ * left untouched, and the original link id/input remain stable so saved
+ * workflows upgrade in place without dropping their wire.
+ */
+function repairPromptTriggerConnection(node) {
+    const connection = promptConnectedSource(node, "main_trigger");
+    const loader = connection?.node;
+    const targetIndex = loaderTriggerOutputIndex(loader);
+    if (!connection?.link || targetIndex < 0 || connection.outputIndex === targetIndex) return false;
+
+    const previousIndex = Number(connection.link.origin_slot);
+    const previousOutput = loader?.outputs?.[previousIndex];
+    const targetOutput = loader?.outputs?.[targetIndex];
+    if (!targetOutput) return false;
+
+    if (Array.isArray(previousOutput?.links)) {
+        previousOutput.links = previousOutput.links.filter((value) => !samePromptLink(value, connection.linkId));
+    }
+    if (!Array.isArray(targetOutput.links)) targetOutput.links = [];
+    if (!targetOutput.links.some((value) => samePromptLink(value, connection.linkId))) {
+        targetOutput.links.push(connection.linkId);
+    }
+
+    connection.link.origin_slot = targetIndex;
+    if (targetOutput.type) connection.link.type = targetOutput.type;
+    node.properties = node.properties || {};
+    node.properties.so_trigger_connection_repaired = true;
+    node.__soTriggerConnectionRepair = {
+        from: String(previousOutput?.name || previousOutput?.label || `output ${previousIndex + 1}`),
+        to: "main_trigger",
+    };
+    loader?.setDirtyCanvas?.(true, true);
+    node.setDirtyCanvas?.(true, true);
+    app.graph?.setDirtyCanvas?.(true, true);
+    return true;
 }
 
 function promptConnectedLiveValue(connection) {
@@ -1600,6 +1946,46 @@ function promptConnectedLiveValue(connection) {
         if (Object.prototype.hasOwnProperty.call(values, key)) return values[key];
     }
     return undefined;
+}
+
+function externalManualPromptState(node) {
+    const connection = promptConnectedSource(node, "manual_prompt_input");
+    const liveValue = promptConnectedLiveValue(connection);
+    const remembered = node?.properties?.so_external_manual_prompt_value;
+    const value = connection
+        ? (liveValue !== undefined ? String(liveValue ?? "") : String(remembered ?? ""))
+        : "";
+    return { connection, connected: Boolean(connection), liveValue, value };
+}
+
+function syncExternalManualPrompt(node) {
+    const state = externalManualPromptState(node);
+    if (!state.connected || state.liveValue === undefined) return false;
+    const text = String(state.liveValue ?? "");
+    node.properties = node.properties || {};
+    if (String(node.properties.so_external_manual_prompt_value ?? "") === text) return false;
+    // Keep a live/fallback copy for the dedicated Prompt Input source, but never
+    // overwrite the Manual draft and never change the selected source.
+    node.properties.so_external_manual_prompt_value = text;
+    node.setDirtyCanvas?.(true, true);
+    return true;
+}
+
+function promptConnectedTriggerValue(connection) {
+    const loader = connection?.node;
+    if (loaderTriggerOutputIndex(loader) >= 0) {
+        const enabledWidget = widget(loader, "main_enabled");
+        const strengthWidget = widget(loader, "main_strength");
+        const selectedWidget = widget(loader, "main_lora");
+        const enabled = enabledWidget ? Boolean(enabledWidget.value) : true;
+        const strength = strengthWidget ? Number(strengthWidget.value ?? 0) : 1;
+        const selected = selectedWidget ? String(selectedWidget.value ?? "").trim() : "active";
+        if (!enabled || !selected || (Number.isFinite(strength) && strength === 0)) return "";
+        if (Object.prototype.hasOwnProperty.call(loader, "__soMainTrigger")) {
+            return loader.__soMainTrigger;
+        }
+    }
+    return promptConnectedLiveValue(connection);
 }
 
 function promptConnectedTextState(node, inputName, metadataKey) {
@@ -1633,7 +2019,7 @@ function substitutionState(node, kind) {
     const valueName = isName ? "name_value" : "item_value";
     const standard = isName ? "NAME" : "ITEM";
     const token = String(widget(node, tokenName)?.value ?? standard);
-    const matches = aliasesInText(activeSourceTemplate(node), tokenCandidates(token, standard));
+    const matches = aliasesInText(activeAssembledTemplate(node), tokenCandidates(token, standard));
     const connection = promptConnectedSource(node, valueName);
     const liveValue = promptConnectedLiveValue(connection);
     const lastValue = node.__soLastAssembly?.[kind]?.value;
@@ -1656,6 +2042,7 @@ function substitutionState(node, kind) {
 }
 
 function connectedTriggerLora(node) {
+    repairPromptTriggerConnection(node);
     const connection = promptConnectedSource(node, "main_trigger");
     return String(widget(connection?.node, "main_lora")?.value ?? "").trim();
 }
@@ -1685,20 +2072,148 @@ function syncTriggerOverrideScope(node) {
 }
 
 function triggerAssemblyState(node) {
+    repairPromptTriggerConnection(node);
     syncTriggerOverrideScope(node);
     const token = String(widget(node, "trigger_token")?.value ?? "TRIGGER");
     const placement = String(widget(node, "trigger_placement")?.value ?? "off");
     const override = String(widget(node, "trigger_override")?.value ?? "").trim();
     const connection = promptConnectedSource(node, "main_trigger");
-    const liveValue = promptConnectedLiveValue(connection);
+    const liveValue = promptConnectedTriggerValue(connection);
     const executed = node.__soLastAssembly?.trigger?.value;
     const value = override || (liveValue !== undefined ? String(liveValue) : String(executed ?? ""));
-    const matches = aliasesInText(activeSourceTemplate(node), tokenCandidates(token, "TRIGGER"));
+    const matches = aliasesInText(activeAssembledTemplate(node), tokenCandidates(token, "TRIGGER"));
     if (placement === "off") return { used: false, tone: value ? "warning" : "off", label: value ? `Off · ${value}` : "Off", token, value, connection, matches, placement };
     if (!value) return { used: false, tone: "warning", label: connection ? "Waiting for Loader" : "Connect Loader", token, value, connection, matches, placement };
     if (placement === "token" && !matches.length) return { used: false, tone: "warning", label: "Not placed in prompt", token, value, connection, matches, placement };
     const placementLabel = { smart: "Auto", token: "Placeholder", prepend: "Beginning", append: "End" }[placement] || placement;
-    return { used: true, tone: "active", label: override ? `Pinned · ${placementLabel} · ${value}` : `${placementLabel} · ${value}`, token, value, connection, matches, placement };
+    const loaderSource = String(connection?.node?.__soMainTriggerSource ?? "");
+    const followingLabel = loaderSource.startsWith("user.")
+        ? `${placementLabel} · Saved LoRA override ✓`
+        : `${placementLabel} · Loader Core · ${value}`;
+    return { used: true, tone: "active", label: override ? `Pinned · ${placementLabel} · ${value}` : followingLabel, token, value, connection, matches, placement };
+}
+
+function promptReplaceAliases(text, candidates, value) {
+    const pattern = aliasPattern(candidates);
+    return pattern ? String(text ?? "").replace(pattern, String(value ?? "")) : String(text ?? "");
+}
+
+function promptCompactRemovedPlaceholder(text) {
+    return String(text ?? "")
+        .replace(/[ \t]+([,.;:!?])/g, "$1")
+        .replace(/[ \t]{2,}/g, " ");
+}
+
+function promptJoinComponentParts(separator, parts) {
+    const values = (parts || []).map((part) => String(part ?? "").trim()).filter(Boolean);
+    if (!values.length) return "";
+    let result = values[0];
+    for (const value of values.slice(1)) {
+        const joiner = String(separator) === ", " && /[.,;:!?]$/.test(result) ? " " : String(separator);
+        result += `${joiner}${value}`;
+    }
+    return result;
+}
+
+function promptSelectedStreamValue(node, base) {
+    if (base !== "prompt" && streamUsesManualSource(node, base)) {
+        return String(widget(node, streamManualWidget(base))?.value ?? "");
+    }
+    const lines = node.__soLogLines?.[base] || [];
+    if (!lines.length) return "";
+    const [, , indexName] = streamConfig(base);
+    return String(lines[normalizedIndex(widget(node, indexName)?.value, lines.length)] ?? "");
+}
+
+function promptConnectedOrWidgetValue(node, inputName, metadataKey = "") {
+    const connection = promptConnectedSource(node, inputName);
+    const live = promptConnectedLiveValue(connection);
+    if (live !== undefined) return String(live ?? "");
+    const previous = metadataKey ? node.__soLastAssembly?.[metadataKey]?.text : undefined;
+    if (connection && previous !== undefined) return String(previous ?? "");
+    return String(widget(node, inputName)?.value ?? "");
+}
+
+function promptApplyCleanupRules(text, rulesText) {
+    const rules = [];
+    for (const rawLine of String(rulesText ?? "").split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith("#")) continue;
+        const marker = line.indexOf("=>");
+        const patternText = (marker >= 0 ? line.slice(0, marker) : line).trim();
+        const pythonReplacement = marker >= 0 ? line.slice(marker + 2).trim() : "";
+        const replacement = pythonReplacement.replace(/\\([0-9]+)/g, (_match, group) => `$${group}`);
+        try { rules.push([new RegExp(patternText, "g"), replacement]); }
+        catch (error) {}
+    }
+    let result = String(text ?? "");
+    for (let pass = 0; pass < 20; pass++) {
+        const previous = result;
+        for (const [pattern, replacement] of rules) {
+            pattern.lastIndex = 0;
+            result = result.replace(pattern, replacement);
+        }
+        if (result === previous) break;
+    }
+    return result.trim();
+}
+
+/** Mirror the backend assembly for immediate, honest dashboard feedback. */
+function promptLiveResolvedPrompt(node) {
+    // Mirror backend order exactly: assemble affixes first, then resolve every
+    // component/identity/trigger placeholder across that complete template.
+    let assembled = activeAssembledTemplate(node);
+    const prepended = [];
+    const appended = [];
+    const separator = String(widget(node, "prefix_suffix_separator")?.value ?? ", ");
+
+    for (const base of ["outfit_A", "outfit_B", "outfit_C", "scene"]) {
+        const placement = String(widget(node, streamPlacementWidget(base))?.value ?? "token");
+        const candidates = streamTokenCandidates(node, base);
+        const matches = aliasesInText(assembled, candidates);
+        const line = promptSelectedStreamValue(node, base).trim();
+        if (placement === "off") {
+            if (matches.length) assembled = promptCompactRemovedPlaceholder(promptReplaceAliases(assembled, candidates, ""));
+        } else if (line && placement === "token" && matches.length) {
+            assembled = promptReplaceAliases(assembled, candidates, line);
+        } else if (line && placement === "smart") {
+            if (matches.length) assembled = promptReplaceAliases(assembled, candidates, line);
+            else appended.push(line);
+        } else if (line && (placement === "prepend" || placement === "append")) {
+            if (matches.length) assembled = promptCompactRemovedPlaceholder(promptReplaceAliases(assembled, candidates, ""));
+            (placement === "prepend" ? prepended : appended).push(line);
+        }
+    }
+
+    const trigger = triggerAssemblyState(node);
+    const triggerCandidates = tokenCandidates(trigger.token, "TRIGGER");
+    const triggerMatches = aliasesInText(assembled, triggerCandidates);
+    if (trigger.placement === "off") {
+        if (triggerMatches.length) assembled = promptCompactRemovedPlaceholder(promptReplaceAliases(assembled, triggerCandidates, ""));
+    } else if (trigger.value && trigger.placement === "token" && triggerMatches.length) {
+        assembled = promptReplaceAliases(assembled, triggerCandidates, trigger.value);
+    } else if (trigger.value && trigger.placement === "smart") {
+        if (triggerMatches.length) assembled = promptReplaceAliases(assembled, triggerCandidates, trigger.value);
+        else prepended.push(trigger.value);
+    } else if (trigger.value && (trigger.placement === "prepend" || trigger.placement === "append")) {
+        if (triggerMatches.length) assembled = promptCompactRemovedPlaceholder(promptReplaceAliases(assembled, triggerCandidates, ""));
+        (trigger.placement === "prepend" ? prepended : appended).push(trigger.value);
+    }
+
+    assembled = promptJoinComponentParts(separator, [...prepended, assembled, ...appended]);
+
+    for (const [kind, tokenName, valueName, standard] of [
+        ["name", "name_token", "name_value", "NAME"],
+        ["item", "item_token", "item_value", "ITEM"],
+    ]) {
+        const value = substitutionState(node, kind).value;
+        const candidates = tokenCandidates(widget(node, tokenName)?.value ?? standard, standard);
+        if (value && aliasesInText(assembled, candidates).length) assembled = promptReplaceAliases(assembled, candidates, value);
+    }
+
+    return Boolean(widget(node, "cleanup_enabled")?.value)
+        ? promptApplyCleanupRules(assembled, widget(node, "cleanup_rules")?.value ?? DEFAULT_CLEANUP)
+        : assembled.trim();
 }
 
 function promptStatusChip(ctx, x, y, w, h, title, detail, tone = "off") {
@@ -1826,7 +2341,7 @@ function promptAnchorInput(node, name, y) {
     const anchorY = Number(node.__soPromptInputAnchors?.[String(name)]);
     if (!Number.isFinite(anchorY)) return;
     input.pos = [0, anchorY];
-    input.label = name === "main_trigger" ? " " : promptExternalInputLabel(node, name);
+    input.label = PROMPT_FORCE_INPUT_NAMES.includes(name) ? " " : promptExternalInputLabel(node, name);
     input.color_on = SO_CMYKG.green;
     input.color_off = "#7f8792";
 }
@@ -1840,7 +2355,7 @@ function promptDashboardInputAnchor(node, slotIndex) {
     if (!input) return null;
     const name = promptInputName(input);
     const y = Number(node.__soPromptInputAnchors?.[name]);
-    if (!(CANONICAL_NAMES.includes(name) || name === "main_trigger") || !Number.isFinite(y) || y < 0) return null;
+    if (!(CANONICAL_NAMES.includes(name) || PROMPT_FORCE_INPUT_NAMES.includes(name)) || !Number.isFinite(y) || y < 0) return null;
     return { name, y };
 }
 
@@ -1858,7 +2373,10 @@ function promptDashboardSet(node, name, value) {
             .find((candidate) => streamPlacementWidget(candidate) === name);
         if (base) resetShuffleBag(node, base);
     }
-    if (name === "prompt_source") {
+    const componentSourceBase = ["outfit_A", "outfit_B", "outfit_C", "scene"]
+        .find((candidate) => streamSourceWidget(candidate) === name);
+    if (componentSourceBase) resetShuffleBag(node, componentSourceBase);
+    if (name === "prompt_source" || componentSourceBase) {
         layoutPromptDashboard(node, true);
     }
     node.setDirtyCanvas?.(true, true);
@@ -1954,6 +2472,65 @@ function chooseConnectedTrigger(node) {
     delete node.properties.so_trigger_override_lora;
 }
 
+async function writeLoaderTriggerOverride(node, value, lora = connectedTriggerLora(node)) {
+    const selected = String(lora ?? "").trim();
+    const trigger = String(value ?? "").trim();
+    if (!selected) throw new Error("Connect Loader Core and select a Main LoRA first.");
+    if (!trigger) throw new Error("Custom trigger cannot be empty.");
+    const response = await fetch("/sickollie/studio/loader-core/trigger-override", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lora: selected, trigger }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP ${response.status}`);
+    chooseConnectedTrigger(node);
+    await refreshConnectedLoaderTrigger(node, selected, payload);
+    return payload;
+}
+
+async function clearLoaderTriggerOverride(node, lora = connectedTriggerLora(node)) {
+    const selected = String(lora ?? "").trim();
+    if (!selected) throw new Error("Connect Loader Core and select a Main LoRA first.");
+    const response = await fetch(`/sickollie/studio/loader-core/trigger-override?lora=${encodeURIComponent(selected)}`, { method: "DELETE" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP ${response.status}`);
+    chooseConnectedTrigger(node);
+    await refreshConnectedLoaderTrigger(node, selected);
+    return payload;
+}
+
+async function refreshConnectedLoaderTrigger(node, expectedLora, resolved = null) {
+    repairPromptTriggerConnection(node);
+    const connection = promptConnectedSource(node, "main_trigger");
+    const loader = connection?.node;
+    if (!loader || String(widget(loader, "main_lora")?.value ?? "").trim() !== String(expectedLora ?? "").trim()) return "";
+    if (typeof loader.__soRefreshMainTrigger === "function") {
+        const value = String(await loader.__soRefreshMainTrigger(true) ?? "");
+        node.setDirtyCanvas?.(true, true);
+        app.graph?.setDirtyCanvas?.(true, true);
+        return value;
+    }
+    let payload = resolved;
+    if (!payload?.trigger) {
+        const response = await fetch(`/sickollie/studio/loader-core/main-trigger?lora=${encodeURIComponent(String(expectedLora ?? ""))}`);
+        payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `HTTP ${response.status}`);
+    }
+    return applyConnectedLoaderTrigger(node, loader, payload);
+}
+
+function applyConnectedLoaderTrigger(node, loader, payload = {}) {
+    if (!loader) return "";
+    loader.__soMainTrigger = String(payload?.trigger ?? "");
+    loader.__soMainTriggerSource = String(payload?.source ?? "");
+    loader.__soLiveOutputs = { ...(loader.__soLiveOutputs || {}), main_trigger: loader.__soMainTrigger };
+    if (loader.__soTriggerButton) loader.__soTriggerButton.name = `📋 Copy trigger: ${loader.__soMainTrigger || "none"}`;
+    loader.setDirtyCanvas?.(true, true);
+    node?.setDirtyCanvas?.(true, true);
+    return loader.__soMainTrigger;
+}
+
 const TRIGGER_PLACEMENT_OPTIONS = [
     { value: "smart", label: "Auto", help: "Uses the TRIGGER placeholder when it exists; otherwise places the trigger at the beginning of the prompt." },
     { value: "token", label: "Placeholder", help: "Only replaces the TRIGGER placeholder. If the placeholder is absent, the trigger is not inserted." },
@@ -1974,11 +2551,15 @@ function triggerSourceLabel(source = "") {
 
 async function promptTriggerBuilder(node) {
     closePromptTriggerBuilder(); closePromptChoicePopup(); closePromptLogBrowser();
+    repairPromptTriggerConnection(node);
     syncTriggerOverrideScope(node);
     const connection = promptConnectedSource(node, "main_trigger");
     const loader = connection?.node;
     const lora = String(widget(loader, "main_lora")?.value ?? "").trim();
     let automaticCandidate = null;
+    if (lora && typeof loader?.__soRefreshMainTrigger === "function") {
+        try { await loader.__soRefreshMainTrigger(true); } catch (error) {}
+    }
 
     const root = document.createElement("div"); root.id = "so-prompt-trigger-builder";
     Object.assign(root.style, { position: "fixed", zIndex: "100003", inset: "0", background: "rgba(0,0,0,.64)", display: "flex", alignItems: "center", justifyContent: "center", padding: "22px" });
@@ -2004,9 +2585,15 @@ async function promptTriggerBuilder(node) {
     sourceSection.append(sourceHeading, sourceStatus, sourceActions);
 
     const renderSourceStatus = () => {
+        repairPromptTriggerConnection(node);
         syncTriggerOverrideScope(node);
         const override = String(widget(node, "trigger_override")?.value ?? "").trim();
-        const live = promptConnectedLiveValue(promptConnectedSource(node, "main_trigger"));
+        const currentConnection = promptConnectedSource(node, "main_trigger");
+        const connectedLive = promptConnectedTriggerValue(currentConnection);
+        const live = loader && Object.prototype.hasOwnProperty.call(loader, "__soMainTrigger")
+            ? loader.__soMainTrigger
+            : connectedLive;
+        const loaderSource = String(loader?.__soMainTriggerSource ?? automaticCandidate?.source ?? "");
         const automatic = automaticCandidate?.suggested || automaticCandidate?.raw || "";
         sourceStatus.replaceChildren();
         const title = document.createElement("div");
@@ -2015,6 +2602,12 @@ async function promptTriggerBuilder(node) {
         Object.assign(title.style, { fontWeight: "800", color: override ? SO_CMYKG.yellow : SO_CMYKG.green, marginBottom: "2px" });
         Object.assign(value.style, { color: "#f5f5f7", fontWeight: "650" });
         Object.assign(note.style, { color: "#92929b", fontSize: "11px", marginTop: "3px" });
+        const following = Boolean(currentConnection) && !override;
+        followLoader.textContent = following ? "✓ Following Loader Core · ON" : "Follow Loader Core";
+        followLoader.setAttribute("aria-pressed", following ? "true" : "false");
+        followLoader.style.borderColor = following ? `${SO_CMYKG.green}ee` : `${SO_CMYKG.green}88`;
+        followLoader.style.background = following ? "rgba(28,69,48,.64)" : "#25252a";
+        followLoader.style.color = following ? "#eafff2" : "#fff";
         if (override) {
             title.textContent = "Pinned for this LoRA";
             value.textContent = override;
@@ -2023,12 +2616,29 @@ async function promptTriggerBuilder(node) {
             title.textContent = "Following Loader Core";
             value.textContent = String(live ?? automatic ?? "").trim() || "No automatic trigger detected";
             note.textContent = connection
-                ? "The trigger follows Loader Core and changes automatically with the Main LoRA."
+                ? (loaderSource.startsWith("user.")
+                    ? `Connected through ${currentConnection?.label || "Loader Core → main_trigger"}. Using this LoRA's saved override; switching the Main LoRA loads that LoRA's own override.`
+                    : `Connected through ${currentConnection?.label || "Loader Core → main_trigger"}. Switching the Main LoRA resolves its own automatic trigger or saved override.`)
                 : "Connect Loader Core → main_trigger to use dynamic trigger detection.";
         }
         sourceStatus.append(title, value, note);
     };
-    followLoader.onclick = () => { chooseConnectedTrigger(node); renderSourceStatus(); };
+    // Source selection and LoRA override storage are independent. Following
+    // Loader Core must never delete a per-LoRA override.
+    followLoader.onclick = async () => {
+        chooseConnectedTrigger(node);
+        repairPromptTriggerConnection(node);
+        followLoader.disabled = true;
+        followLoader.textContent = "Refreshing Loader Core…";
+        try {
+            if (lora) await refreshConnectedLoaderTrigger(node, lora);
+        } catch (error) {
+            console.warn("[Sick Ollie Prompt Core] Could not refresh Loader Core's trigger", error);
+        } finally {
+            followLoader.disabled = !connection;
+            renderSourceStatus();
+        }
+    };
 
     const placementSection = document.createElement("section");
     Object.assign(placementSection.style, { padding: "12px", borderBottom: "1px solid #2b2b31", background: "rgba(255,255,255,.012)" });
@@ -2063,15 +2673,64 @@ async function promptTriggerBuilder(node) {
     const list = document.createElement("div"); list.textContent = lora ? "Checking embedded metadata and Civitai candidates…" : "No connected Main LoRA yet.";
     Object.assign(list.style, { marginBottom: "10px" });
 
-    const customRow = document.createElement("div"); Object.assign(customRow.style, { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "7px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #2b2b31" });
+    const overrideHeading = document.createElement("div"); overrideHeading.textContent = "SAVED OVERRIDE FOR THIS LORA";
+    Object.assign(overrideHeading.style, { color: SO_CMYKG.magenta, fontWeight: "800", fontSize: "11px", letterSpacing: ".06em", marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #2b2b31" });
+    const overrideHelp = document.createElement("div");
+    overrideHelp.textContent = "This replaces Loader Core's detected trigger for this LoRA only. Prompt Core can keep following Loader Core while each LoRA remembers its own value.";
+    Object.assign(overrideHelp.style, { color: "#92929b", fontSize: "11px", lineHeight: "1.35", marginTop: "5px" });
+    const customRow = document.createElement("div"); Object.assign(customRow.style, { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto", gap: "7px", marginTop: "9px" });
     const customInput = document.createElement("input"); customInput.type = "text"; customInput.placeholder = "Custom trigger for this LoRA";
     Object.assign(customInput.style, { minWidth: "0", padding: "8px 9px", borderRadius: "7px", border: "1px solid #494951", background: "#0f0f13", color: "#fff", outline: "none" });
-    const customUse = document.createElement("button"); customUse.textContent = "Use custom";
+    const customUse = document.createElement("button"); customUse.textContent = "Save LoRA override";
     Object.assign(customUse.style, { padding: "8px 11px", borderRadius: "7px", border: `1px solid ${SO_CMYKG.yellow}88`, background: "#25252a", color: "#fff", cursor: "pointer", fontWeight: "700" });
-    customUse.onclick = () => { const value = customInput.value.trim(); if (!value) return; chooseTriggerOverride(node, value, lora); renderSourceStatus(); };
+    const customClear = document.createElement("button"); customClear.textContent = "Clear override";
+    Object.assign(customClear.style, { padding: "8px 11px", borderRadius: "7px", border: `1px solid ${SO_CMYKG.magenta}66`, background: "#25252a", color: "#fff", cursor: "pointer", fontWeight: "700", display: "none" });
+    const refreshOverrideControls = () => {
+        const source = String(loader?.__soMainTriggerSource ?? automaticCandidate?.source ?? "");
+        customClear.style.display = source.startsWith("user.") ? "inline-block" : "none";
+    };
+    const useLoaderOverride = async (value) => {
+        const trigger = String(value ?? "").trim();
+        if (!trigger) return;
+        customUse.disabled = true;
+        customUse.textContent = "Saving…";
+        try {
+            await writeLoaderTriggerOverride(node, trigger, lora);
+            automaticCandidate = { suggested: trigger, raw: trigger, source: "user.override", pinned: true };
+            customInput.value = trigger;
+            renderSourceStatus();
+            refreshOverrideControls();
+        } catch (error) {
+            alert(error.message || "Could not save the Loader Core trigger override.");
+        } finally {
+            customUse.disabled = false;
+            customUse.textContent = "Save LoRA override";
+        }
+    };
+    customUse.onclick = () => useLoaderOverride(customInput.value);
+    customClear.onclick = async () => {
+        customClear.disabled = true;
+        customClear.textContent = "Clearing…";
+        try {
+            await clearLoaderTriggerOverride(node, lora);
+            automaticCandidate = {
+                suggested: String(loader?.__soMainTrigger ?? ""),
+                raw: String(loader?.__soMainTrigger ?? ""),
+                source: String(loader?.__soMainTriggerSource ?? ""),
+            };
+            customInput.value = "";
+            renderSourceStatus();
+            refreshOverrideControls();
+        } catch (error) {
+            alert(error.message || "Could not clear the saved Loader Core trigger override.");
+        } finally {
+            customClear.disabled = false;
+            customClear.textContent = "Clear override";
+        }
+    };
     customInput.addEventListener("keydown", event => { if (event.key === "Enter") customUse.click(); });
-    customRow.append(customInput, customUse);
-    candidateSection.append(candidateHeading, list, customRow);
+    customRow.append(customInput, customUse, customClear);
+    candidateSection.append(candidateHeading, list, overrideHeading, overrideHelp, customRow);
 
     const footer = document.createElement("div"); Object.assign(footer.style, { display: "flex", justifyContent: "flex-end", gap: "8px", padding: "12px", borderTop: "1px solid #2b2b31" });
     const close = document.createElement("button"); close.textContent = "Done";
@@ -2087,8 +2746,14 @@ async function promptTriggerBuilder(node) {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json();
         const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
-        automaticCandidate = payload?.automatic && typeof payload.automatic === "object" ? payload.automatic : null;
+        automaticCandidate = payload?.active && typeof payload.active === "object"
+            ? payload.active
+            : (payload?.automatic && typeof payload.automatic === "object" ? payload.automatic : null);
+        if (String(automaticCandidate?.source ?? "").startsWith("user.")) {
+            customInput.value = String(automaticCandidate?.suggested || automaticCandidate?.raw || "");
+        }
         renderSourceStatus();
+        refreshOverrideControls();
         list.replaceChildren();
         if (!candidates.length) {
             const empty = document.createElement("div"); empty.textContent = "No explicit trigger candidates were found for this LoRA.";
@@ -2120,7 +2785,7 @@ async function promptTriggerBuilder(node) {
             Object.assign(sourceLine.style, { marginTop: "2px", fontSize: "10px", color: reliable ? "#9d9da6" : "#74747c" });
             row.append(valueLine, sourceLine);
             row.title = reliable ? "Pin this trigger for the current Main LoRA." : "Model title metadata is shown as context only.";
-            if (reliable) row.onclick = () => { chooseTriggerOverride(node, group.value, lora); customInput.value = group.value; renderSourceStatus(); };
+            if (reliable) row.onclick = () => useLoaderOverride(group.value);
             list.append(row);
         }
     } catch (error) {
@@ -2216,6 +2881,8 @@ function promptLogDisplay(node, base) {
     const [fileName] = streamConfig(base);
     const value = String(widget(node, fileName)?.value ?? NO_FILE);
     if (!value || value === NO_FILE) return "[None]";
+    const collection = collectionLogDisplay(node, base, value);
+    if (collection) return collection;
     const relative = logRelativeFile(base, value);
     return relative || value;
 }
@@ -2253,6 +2920,8 @@ function promptDrawStreamCard(node, ctx, base, x, y, w, accent, hitPrefix) {
     promptAnchorInput(node, fileName, y + 68);
     promptAnchorInput(node, modeName, y + 97);
     promptAnchorInput(node, indexName, y + 97);
+    promptAnchorInput(node, streamSourceWidget(base), y + 68);
+    promptAnchorInput(node, streamManualWidget(base), y + 68);
     promptRoundRect(ctx, x, y, w, h, 9, "rgba(25,25,29,.98)", `${accent}88`);
     const token = String(widget(node, tokenName)?.value ?? (base === "scene" ? "SCENE" : base.replace("outfit_", "OUTFIT_")));
     const title = base === "scene" ? "SCENE" : base.replace("outfit_", "OUTFIT ").toUpperCase();
@@ -2277,15 +2946,29 @@ function promptDrawStreamCard(node, ctx, base, x, y, w, accent, hitPrefix) {
     promptHit(node, `${hitPrefix}_token_edit`, innerX + placementW + gap, controlY, tokenW, 25, () => promptTextEditor(node, `${title} placeholder`, tokenName, false));
 
     const fileY = controlY + 29;
-    promptValueRow(ctx, x + 8, fileY, w - 16, 25, "Log", promptLogDisplay(node, base), { stroke: `${accent}44` });
-    promptHit(node, `${hitPrefix}_file`, x + 8, fileY, w - 16, 25, () => { closePromptChoicePopup(); openPromptLogBrowser(node, base); });
+    const sourceName = streamSourceWidget(base);
+    const manualName = streamManualWidget(base);
+    const source = String(widget(node, sourceName)?.value ?? "log") === "manual" ? "manual" : "log";
+    const sourceW = Math.min(190, (w - 16) * .28);
+    const sourceValueW = w - 16 - sourceW - gap;
+    promptValueRow(ctx, x + 8, fileY, sourceW, 25, "Source", source === "manual" ? "Manual" : "Log", { stroke: `${accent}44` });
+    promptValueRow(ctx, x + 8 + sourceW + gap, fileY, sourceValueW, 25, source === "manual" ? "Manual value ✎" : "Log", source === "manual" ? String(widget(node, manualName)?.value ?? "") : promptLogDisplay(node, base), { stroke: `${accent}44`, chevron: source !== "manual" });
+    promptHit(node, `${hitPrefix}_source`, x + 8, fileY, sourceW, 25, () => promptChoicePopup(node, `${title} source`, ["manual", "log"], source, (value) => promptDashboardSet(node, sourceName, value), (value) => value === "manual" ? "Manual value" : "Outfit / Scene log"));
+    promptHit(node, `${hitPrefix}_source_value`, x + 8 + sourceW + gap, fileY, sourceValueW, 25, () => {
+        if (source === "manual") promptTextEditor(node, `${title} manual value`, manualName, false);
+        else { closePromptChoicePopup(); openPromptLogBrowser(node, base); }
+    });
 
     const bottomY = fileY + 29;
-    const half = (w - 16 - gap) / 2;
-    promptValueRow(ctx, x + 8, bottomY, half, 25, "Mode", widget(node, modeName)?.value ?? "fixed");
-    promptValueRow(ctx, x + 8 + half + gap, bottomY, half, 25, "Index", promptStreamIndexLabel(node, base));
-    promptHit(node, `${hitPrefix}_mode`, x + 8, bottomY, half, 25, () => promptChoicePopup(node, `${title} mode`, MODES, widget(node, modeName)?.value, (value) => promptDashboardSet(node, modeName, value)));
-    promptHit(node, `${hitPrefix}_index`, x + 8 + half + gap, bottomY, half, 25, () => promptOpenIndexChoice(node, base));
+    if (source === "manual") {
+        promptValueRow(ctx, x + 8, bottomY, w - 16, 25, "Manual value", "Stays fixed while the Prompt Log cycles", { chevron: false, stroke: `${accent}33` });
+    } else {
+        const half = (w - 16 - gap) / 2;
+        promptValueRow(ctx, x + 8, bottomY, half, 25, "Mode", widget(node, modeName)?.value ?? "fixed");
+        promptValueRow(ctx, x + 8 + half + gap, bottomY, half, 25, "Index", promptStreamIndexLabel(node, base));
+        promptHit(node, `${hitPrefix}_mode`, x + 8, bottomY, half, 25, () => promptChoicePopup(node, `${title} mode`, MODES, widget(node, modeName)?.value, (value) => promptDashboardSet(node, modeName, value)));
+        promptHit(node, `${hitPrefix}_index`, x + 8 + half + gap, bottomY, half, 25, () => promptOpenIndexChoice(node, base));
+    }
     return h;
 }
 
@@ -2312,6 +2995,7 @@ function drawPromptExternalInputs(node, ctx, x, y, w) {
 
 function drawPromptDashboard(node, ctx) {
     if (!node.__soPromptDashboardReady || node.flags?.collapsed) return;
+    syncExternalManualPrompt(node);
     node.__soPromptDashboardHits = {};
     const top = promptDashTop(node);
     let x = PROMPT_DASH_PAD;
@@ -2326,6 +3010,41 @@ function drawPromptDashboard(node, ctx) {
     // Labels for the small native input sockets at the upper-left.
     drawPromptExternalInputs(node, ctx, 12, 0, node.size[0] - 24);
 
+    const libraryX = x + 12;
+    const libraryW = w - 24;
+    const libraryY = y - PROMPT_LIBRARY_HEIGHT - PROMPT_LIBRARY_BOTTOM_PAD;
+    const libraryPressed = Number(node.__soCreativeLibraryPressUntil || 0) > Date.now();
+    const libraryHover = Boolean(node.__soCreativeLibraryHover);
+    const faceY = libraryY + (libraryPressed ? 3 : 0);
+    const border = ctx.createLinearGradient(libraryX, 0, libraryX + libraryW, 0);
+    border.addColorStop(0, SO_CMYKG.cyan);
+    border.addColorStop(.5, "#b79aff");
+    border.addColorStop(1, SO_CMYKG.magenta);
+    const face = ctx.createLinearGradient(libraryX, faceY, libraryX + libraryW, faceY + PROMPT_LIBRARY_HEIGHT);
+    face.addColorStop(0, libraryHover || libraryPressed ? "#204b60" : "#193547");
+    face.addColorStop(.5, libraryHover || libraryPressed ? "#393458" : "#29253d");
+    face.addColorStop(1, libraryHover || libraryPressed ? "#652a53" : "#48213d");
+    promptRoundRect(ctx, libraryX, libraryY + 5, libraryW, PROMPT_LIBRARY_HEIGHT, 12, "#08060e", "#553451", 1.5);
+    promptRoundRect(ctx, libraryX, faceY, libraryW, PROMPT_LIBRARY_HEIGHT, 12, face, border, libraryHover ? 2.5 : 1.8);
+    promptRoundRect(ctx, libraryX + 3, faceY + 3, libraryW - 6, PROMPT_LIBRARY_HEIGHT - 6, 9, null, "rgba(255,255,255,.1)");
+    for (let index = 0; index < 3; index++) {
+        promptRoundRect(ctx, libraryX + 22 + index * 8, faceY + 19 - index * 2, 5, 23 + index * 2, 1.5,
+            [SO_CMYKG.cyan, "#b79aff", SO_CMYKG.magenta][index]);
+    }
+    promptDashText(ctx, "OPEN CREATIVE LIBRARY", libraryX + libraryW / 2, faceY + 23, { align: "center", color: "#ffffff", font: "800 14px Segoe UI, Arial" });
+    promptDashText(ctx, "Templates · Prompts · Outfits · Scenes", libraryX + libraryW / 2, faceY + 43, { align: "center", color: "#d5cde6", font: "11px Segoe UI, Arial" });
+    promptRoundRect(ctx, libraryX + libraryW - 52, faceY + 14, 32, 32, 8, "rgba(255,74,184,.16)", `${SO_CMYKG.magenta}aa`);
+    promptDashText(ctx, "↗", libraryX + libraryW - 36, faceY + 30, { align: "center", color: "#ffabe0", font: "700 21px Segoe UI, Arial" });
+    promptHit(node, "creative_library", libraryX, libraryY, libraryW, PROMPT_LIBRARY_HEIGHT + 5, () => {
+        node.__soCreativeLibraryPressUntil = Date.now() + 160;
+        node.setDirtyCanvas?.(true, true);
+        setTimeout(() => node.setDirtyCanvas?.(true, true), 180);
+        try { navigator.vibrate?.(18); } catch (error) {}
+        closePromptChoicePopup();
+        if (typeof window.__soOpenCreativeLibrary === "function") window.__soOpenCreativeLibrary();
+        else window.dispatchEvent(new CustomEvent("sickollie:open-creative-library"));
+    });
+
     const sourceTop = y;
 
     // The socket bay lives above this point. From Prompt Source downward the
@@ -2338,29 +3057,47 @@ function drawPromptDashboard(node, ctx) {
     promptGradientFrame(ctx, PROMPT_DASH_PAD - 3, lowerTop - 5, fullW + 6, promptLowerHeight(node) + 10, 11, .48, SO_CMYKG.magenta);
 
     promptSection(ctx, "Prompt Source", x + 2, y + 8, SO_CMYKG.cyan); y += 19;
-    const sourceMode = String(widget(node, "prompt_source")?.value ?? "manual");
+    const externalPromptState = externalManualPromptState(node);
+    const rawSourceMode = String(widget(node, "prompt_source")?.value ?? "manual");
+    const sourceMode = MAIN_PROMPT_SOURCES.includes(rawSourceMode) ? rawSourceMode : "manual";
+    const sourceLabel = sourceMode === "log" ? "Prompt Log" : (sourceMode === "input" ? "Prompt Input" : "Manual");
+    const formatPromptSource = (value) => value === "log" ? "Prompt Log" : (value === "input" ? "Prompt Input" : "Manual");
     promptAnchorInput(node, "prompt_source", y + 16);
     const modeW = Math.min(170, w * .28); const sourceRowW = w - modeW - gap;
     if (sourceMode === "log") {
-        promptValueRow(ctx, x, y, modeW, rowH, "Source", "Prompt Log");
-        promptHit(node, "source_mode", x, y, modeW, rowH, () => promptChoicePopup(node, "Prompt source", ["manual", "log"], sourceMode, (value) => promptDashboardSet(node, "prompt_source", value), (value) => value === "log" ? "Prompt Log" : "Manual"));
+        promptValueRow(ctx, x, y, modeW, rowH, "Source", sourceLabel);
+        promptHit(node, "source_mode", x, y, modeW, rowH, () => promptChoicePopup(node, "Prompt source", MAIN_PROMPT_SOURCES, sourceMode, (value) => promptDashboardSet(node, "prompt_source", value), formatPromptSource));
         promptValueRow(ctx, x + modeW + gap, y, sourceRowW, rowH, "Prompt log", promptLogDisplay(node, "prompt"), { stroke: `${SO_CMYKG.cyan}66` });
         promptAnchorInput(node, "prompt_log_file", y + rowH / 2);
         promptHit(node, "prompt_file", x + modeW + gap, y, sourceRowW, rowH, () => { closePromptChoicePopup(); openPromptLogBrowser(node, "prompt"); });
     } else {
-        promptValueRow(ctx, x, y, w, rowH, "Source", "Manual");
-        promptHit(node, "source_mode", x, y, w, rowH, () => promptChoicePopup(node, "Prompt source", ["manual", "log"], sourceMode, (value) => promptDashboardSet(node, "prompt_source", value), (value) => value === "log" ? "Prompt Log" : "Manual"));
+        const inputActive = sourceMode === "input";
+        const inputConnected = inputActive && externalPromptState.connected;
+        promptValueRow(ctx, x, y, w, rowH, "Source", inputActive && !externalPromptState.connected ? "Prompt Input · not connected" : sourceLabel, {
+            stroke: inputConnected ? `${SO_CMYKG.green}88` : `${SO_CMYKG.cyan}55`,
+            valueColor: inputConnected ? SO_CMYKG.green : SO_CMYKG.text,
+            chevron: true,
+        });
+        promptHit(node, "source_mode", x, y, w, rowH, () => promptChoicePopup(node, "Prompt source", MAIN_PROMPT_SOURCES, sourceMode, (value) => promptDashboardSet(node, "prompt_source", value), formatPromptSource));
     }
     y += rowH + gap;
 
-    const sourceText = sourceMode === "log" ? promptStreamLine(node, "prompt") : String(widget(node, "manual_prompt")?.value ?? "");
+    const sourceText = sourceMode === "log"
+        ? promptStreamLine(node, "prompt")
+        : (sourceMode === "input" ? externalPromptState.value : String(widget(node, "manual_prompt")?.value ?? ""));
     const trailingSourceH = sourceMode === "log" ? (gap + rowH + PROMPT_LOG_BOTTOM_PAD) : (gap + 6);
     const sourceCardH = Math.max(128, lowerTop - y - trailingSourceH);
     promptAnchorInput(node, sourceMode === "log" ? "prompt_index" : "manual_prompt", y + sourceCardH / 2);
-    promptTextCard(node, ctx, x, y, w, sourceCardH, sourceMode === "log" ? "SELECTED PROMPT LINE" : "MANUAL PROMPT", sourceText, SO_CMYKG.cyan, sourceMode === "log" ? "Choose a prompt log" : "Click to write a prompt");
+    const sourceTitle = sourceMode === "log" ? "SELECTED PROMPT LINE" : (sourceMode === "input" ? "PROMPT INPUT" : "MANUAL PROMPT");
+    const sourceEmpty = sourceMode === "log"
+        ? "Choose a prompt log"
+        : (sourceMode === "input" ? (externalPromptState.connected ? "Connected prompt is empty" : "Connect the Prompt input above") : "Click to write a prompt");
+    promptTextCard(node, ctx, x, y, w, sourceCardH, sourceTitle, sourceText, sourceMode === "input" && externalPromptState.connected ? SO_CMYKG.green : SO_CMYKG.cyan, sourceEmpty);
+    promptAnchorInput(node, "manual_prompt_input", y + sourceCardH / 2);
     promptHit(node, "source_text", x, y, w, sourceCardH, () => {
-        if (sourceMode === "manual") promptTextEditor(node, "Manual prompt", "manual_prompt", true);
-        else promptOpenIndexChoice(node, "prompt");
+        if (sourceMode === "input" && externalPromptState.connected) pulseConnectedSource(node, "manual_prompt_input");
+        else if (sourceMode === "manual") promptTextEditor(node, "Manual prompt", "manual_prompt", true);
+        else if (sourceMode === "log") promptOpenIndexChoice(node, "prompt");
     });
     y += sourceCardH + gap;
     if (sourceMode === "log") {
@@ -2466,9 +3203,18 @@ function drawPromptDashboard(node, ctx) {
 
     promptSection(ctx, "Resolved Prompt", x + 2, y + 7, SO_CMYKG.cyan); y += 18;
     const resolvedH = 130;
-    const resolved = String(widget(node, "saved_prompt")?.value ?? node.properties?.so_saved_final_prompt ?? "");
+    const executedResolved = String(widget(node, "saved_prompt")?.value ?? node.properties?.so_saved_final_prompt ?? "");
+    const liveResolved = promptLiveResolvedPrompt(node);
+    const resolved = liveResolved || executedResolved;
+    const pendingRun = Boolean(liveResolved && liveResolved !== executedResolved);
     promptAnchorInput(node, "saved_prompt", y + resolvedH / 2);
-    promptTextCard(node, ctx, x, y, w, resolvedH, "RESULTING PERSISTENT PROMPT", resolved, SO_CMYKG.cyan, "Run once to populate the resolved prompt");
+    promptTextCard(
+        node, ctx, x, y, w, resolvedH,
+        pendingRun ? "LIVE ASSEMBLY PREVIEW · READY FOR NEXT RUN" : "LIVE ASSEMBLY PREVIEW",
+        resolved,
+        pendingRun ? SO_CMYKG.yellow : SO_CMYKG.cyan,
+        "Choose or write a prompt to preview the resolved assembly",
+    );
     y += resolvedH + 6;
     const copied = node.__soPromptCopyFlash === "resolved";
     promptRoundRect(ctx, x, y, w, 29, 7, copied ? "rgba(54,119,81,.45)" : SO_CMYKG.row, copied ? `${SO_CMYKG.green}cc` : `${SO_CMYKG.cyan}55`);
@@ -2633,6 +3379,36 @@ function installPromptDashboardHooks(nodeType) {
         return originalMouseDown?.apply(this, arguments);
     };
 
+    const originalMouseMove = nodeType.prototype.onMouseMove;
+    nodeType.prototype.onMouseMove = function (event, pos, canvas) {
+        const hover = Boolean(this.__soPromptDashboardReady && !this.flags?.collapsed
+            && promptPointIn(pos, this.__soPromptDashboardHits?.creative_library));
+        if (hover !== Boolean(this.__soCreativeLibraryHover)) {
+            this.__soCreativeLibraryHover = hover;
+            this.setDirtyCanvas?.(true, true);
+        }
+        return originalMouseMove?.apply(this, arguments);
+    };
+    const originalMouseLeave = nodeType.prototype.onMouseLeave;
+    nodeType.prototype.onMouseLeave = function () {
+        this.__soCreativeLibraryHover = false;
+        this.setDirtyCanvas?.(true, true);
+        return originalMouseLeave?.apply(this, arguments);
+    };
+
+    const originalConnectionsChange = nodeType.prototype.onConnectionsChange;
+    nodeType.prototype.onConnectionsChange = function () {
+        const result = originalConnectionsChange?.apply(this, arguments);
+        // LiteGraph fires this while the link is still settling. Defer one
+        // frame, then upgrade a legacy Loader Core clean_name wire to the
+        // dedicated main_trigger output if needed.
+        setTimeout(() => {
+            repairPromptTriggerConnection(this);
+            this.setDirtyCanvas?.(true, true);
+        }, 0);
+        return result;
+    };
+
     const originalResize = nodeType.prototype.onResize;
     nodeType.prototype.onResize = function (size) {
         if (Array.isArray(size) || (size && typeof size === "object")) {
@@ -2660,6 +3436,8 @@ function applyLayout(node) {
 
     // Keep all existing backend/frontend mechanics alive; the dashboard merely
     // becomes the visible interface over those stable values.
+    repairPromptTriggerConnection(node);
+    syncExternalManualPrompt(node);
     healMissingLogSelections(node);
     createCopyButtons(node);
     bindTokenCallbacks(node);
@@ -2675,6 +3453,9 @@ function applyLayout(node) {
 
 app.registerExtension({
     name: "SickOllie.Studio.PromptCore",
+    setup() {
+        ensurePromptBrowserPointerTracker();
+    },
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== TARGET) return;
         installPromptDashboardHooks(nodeType);
@@ -2717,6 +3498,20 @@ app.registerExtension({
             const result = originalConfigure?.apply(this, arguments);
             const stored = this.properties?.so_saved_final_prompt;
             if (stored != null && stored !== "") setTextWidget(this, "saved_prompt", stored);
+            const runtimeManual = this.properties?.so_runtime_manual_prompt;
+            const runtimeSource = this.properties?.so_runtime_prompt_source;
+            if (runtimeManual != null) setTextWidget(this, "manual_prompt", runtimeManual);
+            if (runtimeSource === "manual" || runtimeSource === "input" || runtimeSource === "log") {
+                const sourceWidget = widget(this, "prompt_source");
+                if (sourceWidget) sourceWidget.value = runtimeSource;
+            }
+            // Runtime snapshot hints are one-shot import recovery markers. Once
+            // consumed, remove them so a later hand-edited workflow save cannot
+            // resurrect an older generated prompt on its next load.
+            if (this.properties) {
+                delete this.properties.so_runtime_manual_prompt;
+                delete this.properties.so_runtime_prompt_source;
+            }
             if (this.properties?.so_last_assembly_status && typeof this.properties.so_last_assembly_status === "object") {
                 this.__soLastAssembly = this.properties.so_last_assembly_status;
             }

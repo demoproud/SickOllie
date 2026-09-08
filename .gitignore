@@ -1,0 +1,15 @@
+# Python/runtime caches
+__pycache__/
+*.py[cod]
+.cache/
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local backups and private development notes
+*.bak
+PRIVATE*
+*DEV*.md

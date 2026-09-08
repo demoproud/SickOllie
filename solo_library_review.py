@@ -34,7 +34,8 @@ _MAX_REMOTE_BYTES = 16 * 1024 * 1024
 _MAX_THUMB_BYTES = 160 * 1024
 _MAX_IMAGE_PIXELS = 100_000_000
 _THUMB_BOUND = (384, 512)
-_EPOCH_RE = re.compile(r"(?:^|[_\-\s])epoch[_\-\s]?(\d+)(?=$|[_\-\s.])", re.IGNORECASE)
+_EPOCH_RE = re.compile(r"(?:^|[_\-\s])(?:epoch|ep)[_\-\s]?(\d+)(?=$|[_\-\s.])", re.IGNORECASE)
+_CHECKPOINT_RE = re.compile(r"(?:^|[_\-\s])(\d{3,})(?=$|[_\-\s.])")
 _SUPPORTED_REMOTE_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 
@@ -44,10 +45,10 @@ def _lora_roots() -> list[Path]:
     return [Path(path).resolve() for path in roots if Path(path).is_dir()]
 
 
-def _inside_lora_root(path: Path) -> bool:
+def _inside_lora_root(path: Path, roots: list[Path] | None = None) -> bool:
     try:
         resolved = path.resolve()
-        return any(resolved.is_relative_to(root) for root in _lora_roots())
+        return any(resolved.is_relative_to(root) for root in (roots if roots is not None else _lora_roots()))
     except (OSError, ValueError):
         return False
 
@@ -76,9 +77,9 @@ def _resolve_lora_name(lora_name: str) -> Path | None:
     return None
 
 
-def _relative_lora_name(path: str | os.PathLike[str]) -> str:
+def _relative_lora_name(path: str | os.PathLike[str], roots: list[Path] | None = None) -> str:
     resolved = Path(path).resolve()
-    for root in _lora_roots():
+    for root in roots if roots is not None else _lora_roots():
         try:
             return resolved.relative_to(root).as_posix()
         except ValueError:
@@ -88,12 +89,20 @@ def _relative_lora_name(path: str | os.PathLike[str]) -> str:
 
 def _epoch_number(value: str) -> int | None:
     match = _EPOCH_RE.search(Path(value).stem)
-    return int(match.group(1)) if match else None
+    if match:
+        return int(match.group(1))
+    checkpoint = _CHECKPOINT_RE.search(Path(value).stem)
+    return int(checkpoint.group(1)) if checkpoint else None
 
 
-def _enrich_asset(asset: dict[str, Any]) -> dict[str, Any]:
+def _enrich_asset(
+    asset: dict[str, Any], *, roots: list[Path] | None = None,
+    relative_lora: str | None = None, available_thumbnails: set[str] | None = None,
+) -> dict[str, Any]:
     value = dict(asset)
-    relative = _relative_lora_name(str(value.get("current_path") or ""))
+    relative = relative_lora if relative_lora is not None else _relative_lora_name(
+        str(value.get("current_path") or ""), roots,
+    )
     value["relative_lora"] = relative
     parent = Path(relative).parent.as_posix() if relative else ""
     value["folder"] = "[Root]" if parent in {"", "."} else parent
@@ -109,27 +118,77 @@ def _enrich_asset(asset: dict[str, Any]) -> dict[str, Any]:
         value["civitai_preview"] = ""
     thumbnail = value.get("thumbnail")
     filename = str((thumbnail or {}).get("filename") or value.get("thumbnail_ref") or "")
-    available = bool(filename and Path(filename).name == filename and (_thumbnail_directory() / filename).is_file())
+    available = bool(
+        filename and Path(filename).name == filename
+        and (
+            filename in available_thumbnails
+            if available_thumbnails is not None
+            else (_thumbnail_directory() / filename).is_file()
+        )
+    )
     value["thumbnail_available"] = available
     if thumbnail is not None and not available:
         value["thumbnail"] = None
     return value
 
 
-def _is_live_library_asset(asset: dict[str, Any]) -> bool:
+def _is_live_library_asset(asset: dict[str, Any], roots: list[Path] | None = None) -> bool:
     """The catalog keeps history, but the visual library only shows live LoRAs."""
     try:
         path = Path(str(asset.get("current_path") or ""))
-        return path.is_file() and _inside_lora_root(path)
+        return path.is_file() and _inside_lora_root(path, roots)
     except OSError:
         return False
 
 
 def _live_catalog_assets(state: str = "", query: str = "", sort: str = "recent") -> list[dict[str, Any]]:
+    roots = _lora_roots()
     return [
         asset for asset in get_catalog().list_assets(state, query, sort)
-        if _is_live_library_asset(asset)
+        if _is_live_library_asset(asset, roots)
     ]
+
+
+def _library_assets_payload(state: str = "", query: str = "", sort: str = "recent") -> list[dict[str, Any]]:
+    """Build one gallery snapshot without repeating root and thumbnail scans."""
+    roots = _lora_roots()
+    thumbnail_directory = _thumbnail_directory()
+    try:
+        available_thumbnails = {
+            path.name for path in thumbnail_directory.iterdir()
+            if path.is_file() and path.suffix.casefold() == ".webp"
+        }
+    except OSError:
+        available_thumbnails = set()
+    payload: list[dict[str, Any]] = []
+    for asset in get_catalog().list_assets(state, query, sort):
+        current_path = Path(str(asset.get("current_path") or ""))
+        try:
+            relative = _relative_lora_name(current_path, roots)
+            if not relative or not current_path.is_file():
+                continue
+        except OSError:
+            continue
+        payload.append(_enrich_asset(
+            asset,
+            roots=roots,
+            relative_lora=relative,
+            available_thumbnails=available_thumbnails,
+        ))
+    return payload
+
+
+def _live_lora_folders() -> list[str]:
+    """Derive non-empty folder navigation from ComfyUI's live filename cache."""
+    getter = getattr(folder_paths, "get_filename_list", None)
+    names = getter("loras") if callable(getter) else []
+    folders: set[str] = set()
+    for name in names or []:
+        normalized = str(name or "").replace("\\", "/").strip("/")
+        parts = [part for part in normalized.split("/")[:-1] if part and part not in {".", ".."}]
+        for index in range(1, len(parts) + 1):
+            folders.add("/".join(parts[:index]))
+    return sorted(folders, key=str.casefold)
 
 
 def _sidecar_candidates(lora_path: Path) -> list[Path]:
@@ -397,11 +456,25 @@ def _scan_sidecar(asset_id: str, path: Path) -> bool:
     return True
 
 
-def scan_library(limit: int = 0) -> dict[str, Any]:
+def _clean_scan_folder(value: str) -> str:
+    clean = str(value or "").strip().replace("\\", "/").strip("/")
+    if not clean or clean in {"[All folders]", "[Root]"}:
+        return ""
+    parts = [part for part in clean.split("/") if part]
+    if any(part in {".", ".."} for part in parts):
+        raise ValueError("LoRA scan folder is invalid")
+    return "/".join(parts)
+
+
+def scan_library(limit: int = 0, folder: str = "") -> dict[str, Any]:
     catalog = get_catalog()
+    clean_folder = _clean_scan_folder(folder)
     found = thumbnails = sidecars = 0
     for root in _lora_roots():
-        for path in root.rglob("*.safetensors"):
+        scan_root = (root / Path(clean_folder)).resolve() if clean_folder else root
+        if not scan_root.is_relative_to(root) or not scan_root.is_dir():
+            continue
+        for path in scan_root.rglob("*.safetensors"):
             if not path.is_file():
                 continue
             try:
@@ -429,8 +502,8 @@ def scan_library(limit: int = 0) -> dict[str, Any]:
                         pass
             found += 1
             if limit and found >= limit:
-                return {"ok": True, "scanned": found, "thumbnails": thumbnails, "sidecars": sidecars, "limited": True}
-    return {"ok": True, "scanned": found, "thumbnails": thumbnails, "sidecars": sidecars, "limited": False}
+                return {"ok": True, "scanned": found, "thumbnails": thumbnails, "sidecars": sidecars, "limited": True, "folder": clean_folder}
+    return {"ok": True, "scanned": found, "thumbnails": thumbnails, "sidecars": sidecars, "limited": False, "folder": clean_folder}
 
 
 def _asset_detail(asset_id: str) -> dict[str, Any]:
@@ -537,14 +610,7 @@ if PromptServer is not None and web is not None:
 
     @PromptServer.instance.routes.get("/sickollie/library-review/folders")
     async def solo_library_folders(request):
-        folders: set[str] = set()
-        for root in _lora_roots():
-            for path in root.rglob("*"):
-                if path.is_dir():
-                    relative = path.relative_to(root).as_posix()
-                    if relative and not relative.startswith("."):
-                        folders.add(relative)
-        return web.json_response(sorted(folders, key=str.casefold))
+        return web.json_response(await asyncio.to_thread(_live_lora_folders))
 
     @PromptServer.instance.routes.get("/sickollie/library-review/lora-files")
     async def solo_library_lora_files(request):
@@ -554,12 +620,12 @@ if PromptServer is not None and web is not None:
 
     @PromptServer.instance.routes.get("/sickollie/library-review/assets")
     async def solo_library_assets(request):
-        assets = _live_catalog_assets(
+        return web.json_response(await asyncio.to_thread(
+            _library_assets_payload,
             str(request.rel_url.query.get("state", "") or ""),
             str(request.rel_url.query.get("q", "") or ""),
             str(request.rel_url.query.get("sort", "recent") or "recent"),
-        )
-        return web.json_response([_enrich_asset(asset) for asset in assets])
+        ))
 
     @PromptServer.instance.routes.get("/sickollie/library-review/asset/{asset_id}")
     async def solo_library_asset(request):
@@ -580,9 +646,93 @@ if PromptServer is not None and web is not None:
 
     @PromptServer.instance.routes.post("/sickollie/library-review/scan")
     async def solo_library_scan(request):
-        payload = await request.json() if request.can_read_body else {}
-        limit = max(0, min(10000, int((payload or {}).get("limit", 0) or 0)))
-        return web.json_response(await asyncio.to_thread(scan_library, limit))
+        try:
+            payload = await request.json() if request.can_read_body else {}
+            limit = max(0, min(10000, int((payload or {}).get("limit", 0) or 0)))
+            folder = _clean_scan_folder(str((payload or {}).get("folder") or ""))
+            return web.json_response(await asyncio.to_thread(scan_library, limit, folder))
+        except ValueError as error:
+            return web.json_response({"ok": False, "error": str(error)}, status=400)
+
+    @PromptServer.instance.routes.get("/sickollie/library-review/lora-collections")
+    async def solo_library_lora_collections(request):
+        return web.json_response(await asyncio.to_thread(get_catalog().lora_collections))
+
+    @PromptServer.instance.routes.get("/sickollie/library-review/loader-collections")
+    async def solo_library_loader_collections(request):
+        catalog = get_catalog()
+        collections = catalog.lora_collections()
+        live_by_id: dict[str, str] = {}
+        for asset in _live_catalog_assets():
+            relative = _relative_lora_name(str(asset.get("current_path") or ""))
+            if relative:
+                live_by_id[str(asset.get("asset_id") or "")] = relative
+        payload: list[dict[str, Any]] = []
+        for collection in collections:
+            names = [
+                live_by_id[asset_id]
+                for asset_id in (str(value) for value in (collection.get("asset_ids") or []))
+                if asset_id in live_by_id
+            ]
+            payload.append({
+                "collection_id": str(collection.get("collection_id") or ""),
+                "name": str(collection.get("name") or ""),
+                "color": str(collection.get("color") or ""),
+                "asset_count": int(collection.get("asset_count") or 0),
+                "live_count": len(names),
+                "lora_names": names,
+            })
+        return web.json_response(payload)
+
+    @PromptServer.instance.routes.post("/sickollie/library-review/lora-collections")
+    async def solo_library_create_lora_collection(request):
+        try:
+            payload = await request.json()
+            return web.json_response({"ok": True, "collection": get_catalog().create_lora_collection(str(payload.get("name") or ""), str(payload.get("color") or ""))})
+        except ValueError as error:
+            return web.json_response({"ok": False, "error": str(error)}, status=400)
+
+    @PromptServer.instance.routes.post("/sickollie/library-review/lora-collections/members/bulk")
+    async def solo_library_update_lora_collections_bulk(request):
+        try:
+            payload = await request.json()
+            asset_ids = payload.get("asset_ids") or []
+            collection_ids = payload.get("collection_ids") or []
+            if not isinstance(asset_ids, list) or not isinstance(collection_ids, list):
+                raise ValueError("asset_ids and collection_ids must be lists")
+            action = str(payload.get("action") or "add").strip().lower()
+            if action not in {"add", "remove"}:
+                raise ValueError("Collection action must be add or remove")
+            result = get_catalog().update_lora_collections_members(
+                collection_ids,
+                asset_ids,
+                remove=action == "remove",
+            )
+            return web.json_response({"ok": True, **result})
+        except ValueError as error:
+            return web.json_response({"ok": False, "error": str(error)}, status=400)
+
+    @PromptServer.instance.routes.delete("/sickollie/library-review/lora-collections/{collection_id}")
+    async def solo_library_delete_lora_collection(request):
+        deleted = get_catalog().delete_lora_collection(request.match_info["collection_id"])
+        return web.json_response({"ok": True, "deleted": deleted})
+
+    @PromptServer.instance.routes.post("/sickollie/library-review/lora-collections/{collection_id}/members")
+    async def solo_library_update_lora_collection(request):
+        try:
+            payload = await request.json()
+            asset_ids = payload.get("asset_ids") or []
+            if not isinstance(asset_ids, list):
+                raise ValueError("asset_ids must be a list")
+            action = str(payload.get("action") or "add").strip().lower()
+            if action not in {"add", "remove"}:
+                raise ValueError("Collection action must be add or remove")
+            result = get_catalog().update_lora_collection_members(
+                request.match_info["collection_id"], asset_ids, remove=action == "remove",
+            )
+            return web.json_response({"ok": True, **result})
+        except ValueError as error:
+            return web.json_response({"ok": False, "error": str(error)}, status=400)
 
     @PromptServer.instance.routes.post("/sickollie/library-review/maintenance")
     async def solo_library_maintenance(request):

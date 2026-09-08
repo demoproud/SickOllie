@@ -14,6 +14,8 @@ from PIL import Image, ImageOps, ImageSequence
 
 import folder_paths
 
+from .image_metadata_compat import parse_json_parameters
+
 try:
     from aiohttp import web
     from server import PromptServer
@@ -24,6 +26,7 @@ except Exception:  # pragma: no cover - unavailable outside ComfyUI runtime
 NO_FILE = "[None]"
 TEMP_TOKEN_PREFIX = "so-temp::"
 TEMP_SUBFOLDER = "SickOllieMetadata"
+TEMP_FILE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 
 
 def _metadata_temp_root() -> Path:
@@ -64,6 +67,23 @@ def _delete_temp_token(value: str) -> bool:
     except Exception:
         pass
     return False
+
+
+def _cleanup_stale_temp_files(max_age_seconds: int = TEMP_FILE_MAX_AGE_SECONDS) -> int:
+    root = _metadata_temp_root()
+    now = __import__("time").time()
+    removed = 0
+    for child in root.iterdir():
+        try:
+            if not child.is_file():
+                continue
+            if now - child.stat().st_mtime <= max(60, int(max_age_seconds)):
+                continue
+            child.unlink()
+            removed += 1
+        except Exception:
+            continue
+    return removed
 
 
 def _input_image_choices() -> list[str]:
@@ -138,6 +158,17 @@ def _path_from_selected(image_file: str) -> str:
     except Exception:
         candidate = Path(folder_paths.get_input_directory()) / value
         return str(candidate) if candidate.is_file() else ""
+
+
+def _input_is_linked(prompt: Any, unique_id: Any, input_name: str) -> bool:
+    if not isinstance(prompt, dict):
+        return False
+    start = prompt.get(str(unique_id)) or prompt.get(unique_id)
+    if not isinstance(start, dict):
+        return False
+    inputs = _dict_value(start.get("inputs", {}))
+    value = inputs.get(str(input_name or ""))
+    return bool(isinstance(value, list) and value and str(value[0]) in prompt)
 
 
 def _trace_upstream_file(prompt: Any, unique_id: Any) -> str:
@@ -228,6 +259,29 @@ def _parameters_fields(parameters: str) -> dict[str, Any]:
     text = str(parameters or "").strip()
     if not text:
         return {}
+
+    json_values = parse_json_parameters(text)
+    if json_values:
+        fields: dict[str, Any] = {}
+        if json_values.get("prompt"):
+            fields["positive_prompt"] = json_values["prompt"]
+        if json_values.get("negative_prompt"):
+            fields["negative_prompt"] = json_values["negative_prompt"]
+        for source, target in (
+            ("steps", "Steps"), ("sampler_name", "Sampler"), ("scheduler", "Scheduler"),
+            ("cfg", "CFG scale"), ("seed_value", "Seed"), ("diffusion_model", "Model"),
+            ("diffusion_model_hash", "Model hash"), ("vae_name", "VAE"), ("vae_hash", "VAE hash"),
+        ):
+            if json_values.get(source) is not None and json_values.get(source) != "":
+                fields[target] = json_values[source]
+        width, height = json_values.get("custom_width"), json_values.get("custom_height")
+        if width and height:
+            fields["Size"] = f"{int(width)}x{int(height)}"
+        if isinstance(json_values.get("loras"), list):
+            fields["_loras"] = json_values["loras"]
+        fields["_format"] = json_values.get("format", "json-parameters")
+        return fields
+
     fields: dict[str, Any] = {}
     detail_keys = [
         "Steps", "Sampler", "Schedule type", "Scheduler", "CFG scale", "Seed",
@@ -376,7 +430,14 @@ def _sanitize_resolved(resolved: dict[str, Any]) -> dict[str, Any]:
     source_prompt = str(cleaned.get("source_prompt", "") or "")
 
     prompt = cleaned.get("prompt") if isinstance(cleaned.get("prompt"), dict) else {}
-    if str(prompt.get("source", "") or "").lower() != "log":
+    prompt_source = str(prompt.get("source", "") or "").lower()
+    if prompt_source == "input":
+        cleaned["prompt"] = {
+            "source": "input",
+            "input_prompt": str(prompt.get("input_prompt", source_prompt) or source_prompt),
+            "external_input": bool(prompt.get("external_input", True)),
+        }
+    elif prompt_source != "log":
         cleaned["prompt"] = {
             "source": "manual",
             "manual_prompt": str(prompt.get("manual_prompt", source_prompt) or source_prompt),
@@ -464,7 +525,7 @@ def _parse_metadata(info: dict[str, Any], filename: str, size: tuple[int, int], 
     models.setdefault("main_trigger", info.get("so_loader_core_main_trigger", ""))
     if not models.get("all_loras"):
         raw_loras = info.get("so_loader_core_applied_loras", [])
-        if isinstance(raw_loras, list):
+        if isinstance(raw_loras, list) and raw_loras:
             models["all_loras"] = []
             for index, value in enumerate(raw_loras):
                 text = str(value)
@@ -472,6 +533,18 @@ def _parse_metadata(info: dict[str, Any], filename: str, size: tuple[int, int], 
                 models["all_loras"].append({"role": "main" if index == 0 else "secondary", "file": file_name, "name": Path(file_name).stem, "strength": strength})
         elif graph_models.get("all_loras"):
             models["all_loras"] = graph_models.get("all_loras")
+        elif isinstance(params.get("_loras"), list) and params.get("_loras"):
+            models["all_loras"] = [
+                {
+                    "role": "main" if index == 0 else "secondary",
+                    "file": str(item.get("file") or item.get("name") or ""),
+                    "name": str(item.get("name") or Path(str(item.get("file") or "")).stem),
+                    "strength": item.get("strength", 1.0),
+                    "hash": str(item.get("hash") or ""),
+                }
+                for index, item in enumerate(params.get("_loras") or [])
+                if isinstance(item, dict) and (item.get("file") or item.get("name"))
+            ]
 
     final_prompt = _first(
         resolved.get("final_prompt"), info.get("resolved_prompt"), generation.get("positive_prompt"),
@@ -550,6 +623,10 @@ def _parse_metadata(info: dict[str, Any], filename: str, size: tuple[int, int], 
     outfit_b_text = _format_section(resolved.get("outfit_b"))
     outfit_c_text = _format_section(resolved.get("outfit_c"))
     scene_text = _format_section(resolved.get("scene"))
+    copy_values = {
+        key: str((resolved.get(key) if isinstance(resolved.get(key), dict) else {}).get("line", "") or "")
+        for key in ("outfit_a", "outfit_b", "outfit_c", "scene")
+    }
 
     substitutions = []
     for key, label in (("name", "NAME"), ("item", "ITEM")):
@@ -615,6 +692,7 @@ def _parse_metadata(info: dict[str, Any], filename: str, size: tuple[int, int], 
         "outfit_b": outfit_b_text,
         "outfit_c": outfit_c_text,
         "scene": scene_text,
+        "copy_values": copy_values,
         "substitutions": substitutions_text,
         "resolved_inputs": master_metadata,
         "full_report": full_report,
@@ -696,7 +774,6 @@ if PromptServer is not None and web is not None:
     async def so_metadata_core_upload_temp(request):
         reader = await request.multipart()
         upload_field = None
-        previous_token = ""
 
         while True:
             field = await reader.next()
@@ -706,7 +783,11 @@ if PromptServer is not None and web is not None:
                 upload_field = field
                 break
             if field.name == "previous_token":
-                previous_token = (await field.text()).strip()
+                # Older frontends still send this field. Keep accepting it for
+                # compatibility, but do not delete the previous temp source here.
+                # Queued workflows may still reference earlier tokens and must
+                # remain reproducible even after the user loads another image.
+                await field.text()
 
         if upload_field is None or not upload_field.filename:
             return web.json_response({"ok": False, "error": "No image uploaded"}, status=400)
@@ -716,6 +797,7 @@ if PromptServer is not None and web is not None:
         if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
             return web.json_response({"ok": False, "error": "Unsupported image type"}, status=400)
 
+        _cleanup_stale_temp_files()
         root = _metadata_temp_root()
         safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(original_name).stem).strip("._") or "image"
         filename = f"{uuid.uuid4().hex[:12]}_{safe_stem}{suffix}"
@@ -733,9 +815,6 @@ if PromptServer is not None and web is not None:
             # keeping it around as an inspector source.
             with Image.open(destination) as image:
                 image.verify()
-
-            if previous_token and previous_token != _temp_token_for_path(destination):
-                _delete_temp_token(previous_token)
 
             token = _temp_token_for_path(destination)
             payload, _images, preview = _metadata_payload_for_path(str(destination))
@@ -843,13 +922,14 @@ class SOImageMetadataCore:
         unique_id=None,
     ):
         selected_path = _path_from_selected(image_file)
-        has_wired_image = images is not None
+        has_wired_image = _input_is_linked(prompt, unique_id, "images")
         traced_path = _trace_upstream_file(prompt, unique_id) if has_wired_image else ""
 
-        # A connected IMAGE is the live workflow source and must win over a
-        # previously uploaded/selected file. This lets the node be used as both
-        # a passive file inspector and a live metadata monitor without an old
-        # dropdown selection pinning it to stale metadata.
+        # Only a genuinely linked IMAGE input should take priority over the
+        # manually loaded inspector file. During workflow execution Comfy can
+        # still materialize a placeholder 64x64 tensor for an unlinked optional
+        # IMAGE input; treating that placeholder as a real live source causes
+        # the node to forget the selected file and emit blank prompt metadata.
         source_path = traced_path if traced_path and os.path.isfile(traced_path) else ("" if has_wired_image else selected_path)
 
         if source_path and os.path.isfile(source_path):
