@@ -20,6 +20,9 @@ const YEARBOOK_DEFAULT_STRENGTH = 1.0;
 const YEARBOOK_DEFAULT_SEED = 4815162342;
 const YEARBOOK_THEATER_ENABLED_KEY = "sickollie.library.yearbookTheaterEnabled";
 const YEARBOOK_THEATER_SIZE_KEY = "sickollie.library.yearbookTheaterSize";
+const YEARBOOK_THUMB_SIZE_KEY = "sickollie.library.yearbookThumbSize";
+const YEARBOOK_THUMB_BUDGET_KEY = "sickollie.library.yearbookThumbBudget";
+const YEARBOOK_LORA_PREVIEW_KEY = "sickollie.library.yearbookLoraPreview";
 const YEARBOOK_DIMENSION_PRESETS = [
     ["400x500", "400 × 500 · Fast", 400, 500],
     ["512x640", "512 × 640 · Light", 512, 640],
@@ -845,9 +848,13 @@ async function openDetail(assetId) {
         picker.onchange = async () => { const file = picker.files?.[0]; if (!file) return; upload.disabled = true; try { const form = new FormData(); form.append("file", file); await request(`/thumbnail/upload/${encodeURIComponent(assetId)}`, { method: "POST", body: form }); await reopenDetail(modal, assetId); } catch (error) { alert(error.message); upload.disabled = false; } };
         picker.click();
     };
+    const singleYearbook = action("Yearbook this LoRA", "#f4ec51"); singleYearbook.onclick = () => {
+        const selected = { ...detail, thumbnail_ref: detail.thumbnail?.filename || "", thumbnail_source: detail.thumbnail?.source || "", thumbnail_available: Boolean(detail.thumbnail), review_state: detail.review?.state || "none" };
+        if (openYearbookDialog(selected)) { releaseFocusInside(modal); modal.remove(); }
+    };
     const useCiv = action("Use selected Civitai image", "#9c62ff"); useCiv.disabled = !remoteImages.length; useCiv.onclick = async () => { const url = selectedRemote || remoteImages[0]; if (!url) return; useCiv.disabled = true; try { await request(`/thumbnail/cache-civitai/${encodeURIComponent(assetId)}`, { method: "POST", body: { url } }); await reopenDetail(modal, assetId); } catch (error) { alert(error.message); useCiv.disabled = false; } };
     const clearThumb = action("Clear local default", "#ff3eaf"); clearThumb.disabled = !detail.thumbnail; clearThumb.onclick = async () => { if (!confirm("Clear this local default thumbnail? The LoRA and Civitai showcase are untouched.")) return; await request(`/thumbnail/${encodeURIComponent(assetId)}`, { method: "DELETE" }); await reopenDetail(modal, assetId); };
-    mediaActions.append(upload, useCiv, clearThumb); media.append(main, showcase, mediaActions);
+    mediaActions.append(upload, singleYearbook, useCiv, clearThumb); media.append(main, showcase, mediaActions);
 
     const info = document.createElement("div");
     const actions = section("ENTRY ACTIONS");
@@ -1153,20 +1160,22 @@ function orderedYearbookItems(values, orderMode) {
     return shuffled(values);
 }
 
-function openYearbookDialog() {
-    if (!yearbook && window.__soCreativeLibraryRunActive) { alert("Stop the active Creative Library Catalog Run before starting Yearbook."); return; }
+function openYearbookDialog(selectedAsset = null) {
+    if (!yearbook && window.__soCreativeLibraryRunActive) { alert("Stop the active Creative Library Catalog Run before starting Yearbook."); return false; }
     // The active button is already explicitly labelled “Stop yearbook”. Keep the
     // cancellation path inside our own UI instead of introducing a native modal.
-    if (yearbook) { stopYearbook(false); return; }
-    const visible = visibleAssets().filter(asset => asset.relative_lora);
-    if (!visible.length) { alert("The current filters contain no loadable LoRAs."); return; }
+    if (yearbook) { if (selectedAsset) alert("Stop the active Yearbook run before starting another."); else stopYearbook(false); return false; }
+    const visible = selectedAsset ? [selectedAsset].filter(asset => asset.relative_lora) : visibleAssets().filter(asset => asset.relative_lora);
+    if (!visible.length) { alert("The selected LoRA is not available for a Yearbook run."); return false; }
     const loader = findLoader(); const prompt = (app.graph?._nodes || []).find(node => node.type === PROMPT_TYPE); const generation = (app.graph?._nodes || []).find(node => node.type === GENERATION_TYPE); const outputs = findOutputs();
-    if (!loader || !prompt || !generation) { alert("Studio Loader Core, Prompt Core, and Generation Core must be on the current canvas for a yearbook run."); return; }
-    if (outputs.some(output => widgetConnected(output, "output_root"))) { alert("Output Core's Output root is connected. Disconnect it before Yearbook so generated files can be routed into the dedicated LoRA Library folder."); return; }
+    if (!loader || !prompt || !generation) { alert("Studio Loader Core, Prompt Core, and Generation Core must be on the current canvas for a yearbook run."); return false; }
+    if (outputs.some(output => widgetConnected(output, "output_root"))) { alert("Output Core's Output root is connected. Disconnect it before Yearbook so generated files can be routed into the dedicated LoRA Library folder."); return false; }
     const modal = document.createElement("div"); modal.className = "so-lib-modal";
     const card = document.createElement("section"); card.className = "so-lib-form-card so-lib-yearbook-card";
-    const title = document.createElement("h3"); title.textContent = "YEARBOOK THUMBNAIL RUN";
-    const copy = document.createElement("p"); copy.textContent = `${visible.length.toLocaleString()} LoRAs are in the filtered scope. Yearbook uses the comparison settings below and keeps generated files under output/${LORA_YEARBOOK_OUTPUT_ROOT}. Your original Loader, Prompt, Generation, and Output values return when the run ends.`;
+    const title = document.createElement("h3"); title.textContent = selectedAsset ? "YEARBOOK THIS LORA" : "YEARBOOK THUMBNAIL RUN";
+    const copy = document.createElement("p"); copy.textContent = selectedAsset
+        ? `Generate a new image for ${selectedAsset.model_name || selectedAsset.relative_lora} and replace its Library thumbnail. The full generated file is saved under output/${LORA_YEARBOOK_OUTPUT_ROOT}. Original workflow values return when the run ends.`
+        : `${visible.length.toLocaleString()} LoRAs are in the filtered scope. Yearbook uses the comparison settings below and keeps generated files under output/${LORA_YEARBOOK_OUTPUT_ROOT}. Your original Loader, Prompt, Generation, and Output values return when the run ends.`;
 
     const settingsTitle = document.createElement("div"); settingsTitle.className = "so-lib-form-section-title"; settingsTitle.textContent = "COMPARISON SETTINGS";
     const settings = document.createElement("div"); settings.className = "so-lib-yearbook-settings";
@@ -1207,6 +1216,16 @@ function openYearbookDialog() {
     seedField.append(seedLabel, seedInput, seedHint);
     settings.append(strengthField, dimensionsField, seedField);
 
+    const thumbSizeField = document.createElement("label"); thumbSizeField.className = "so-lib-yearbook-setting";
+    const thumbSizeLabel = document.createElement("span"); thumbSizeLabel.textContent = "Library thumbnail size";
+    const thumbSize = selectControl([["512", "512 px longest edge · Compact"], ["1024", "1024 px longest edge · Detailed"], ["1600", "1600 px longest edge · Large"], ["2048", "2048 px longest edge · Maximum"]], localStorage.getItem(YEARBOOK_THUMB_SIZE_KEY) || "1024", () => {});
+    thumbSizeField.append(thumbSizeLabel, thumbSize);
+    const thumbBudgetField = document.createElement("label"); thumbBudgetField.className = "so-lib-yearbook-setting";
+    const thumbBudgetLabel = document.createElement("span"); thumbBudgetLabel.textContent = "Thumbnail file budget";
+    const thumbBudget = selectControl([["160", "160 KiB"], ["512", "512 KiB"], ["1024", "1 MiB"], ["2048", "2 MiB"], ["4096", "4 MiB"]], localStorage.getItem(YEARBOOK_THUMB_BUDGET_KEY) || "1024", () => {});
+    thumbBudgetField.append(thumbBudgetLabel, thumbBudget);
+    settings.append(thumbSizeField, thumbBudgetField);
+
     const promptTitle = document.createElement("div"); promptTitle.className = "so-lib-form-section-title"; promptTitle.textContent = "YEARBOOK PROMPT";
     const textarea = document.createElement("textarea"); textarea.className = "so-lib-textarea"; textarea.value = localStorage.getItem(YEARBOOK_PROMPT_KEY) || DEFAULT_YEARBOOK_PROMPT;
 
@@ -1219,7 +1238,7 @@ function openYearbookDialog() {
         ["non_yearbook", `Standardize non-Yearbook thumbnails · ${modeCounts.non_yearbook}`],
         ["yearbook", `Rebuild existing Yearbook thumbnails · ${modeCounts.yearbook}`],
         ["all", `Replace every thumbnail · ${modeCounts.all}`],
-    ], "missing", () => {});
+    ], selectedAsset ? "all" : "missing", () => {});
     const modeCopy = document.createElement("p"); modeCopy.className = "so-lib-yearbook-note"; modeCopy.textContent = "Standardize non-Yearbook fills missing entries and replaces Civitai, generated, local-preview, and other automatic thumbnails while preserving custom images and existing Yearbook thumbnails.";
     const scopedEpochs = [...new Set(visible.map(yearbookEpochNumber).filter(value => value != null))].sort((a, b) => a - b);
     const incrementalDefault = !collectionScope && folderScope !== ALL_FOLDERS && scopedEpochs.length >= 2;
@@ -1235,12 +1254,13 @@ function openYearbookDialog() {
         : "Incremental order reads explicit epoch/ep numbers and common zero-padded checkpoint suffixes. Unnumbered files follow afterward in natural filename order.";
     const auto = document.createElement("label"); auto.className = "so-lib-toggle so-lib-yearbook-auto"; const autoCheck = document.createElement("input"); autoCheck.type = "checkbox"; autoCheck.checked = true; auto.append(autoCheck, document.createTextNode("Queue each next generation automatically"));
     const theaterToggle = document.createElement("label"); theaterToggle.className = "so-lib-toggle so-lib-yearbook-auto"; const theaterCheck = document.createElement("input"); theaterCheck.type = "checkbox"; theaterCheck.checked = yearbookTheaterEnabledByDefault(); theaterToggle.append(theaterCheck, document.createTextNode("Open Theater Mode · Live"));
+    const loraPreviewToggle = document.createElement("label"); loraPreviewToggle.className = "so-lib-toggle so-lib-yearbook-auto"; const loraPreviewCheck = document.createElement("input"); loraPreviewCheck.type = "checkbox"; loraPreviewCheck.checked = localStorage.getItem(YEARBOOK_LORA_PREVIEW_KEY) === "true"; loraPreviewToggle.append(loraPreviewCheck, document.createTextNode("Save full image beside each LoRA and update preview_url in its .metadata.json"));
     const buttons = document.createElement("div"); buttons.className = "so-lib-form-actions"; const cancel = action("Cancel", "#8c8295"); const start = action("Start shuffled run", "#f4ec51");
-    const updateStartLabel = () => { start.textContent = orderSelect.value === "epoch_ascending" ? "Start incremental run" : orderSelect.value === "current_view" ? "Start ordered run" : "Start shuffled run"; };
+    const updateStartLabel = () => { start.textContent = selectedAsset ? "Start Yearbook run" : orderSelect.value === "epoch_ascending" ? "Start incremental run" : orderSelect.value === "current_view" ? "Start ordered run" : "Start shuffled run"; };
     orderSelect.onchange = updateStartLabel; updateStartLabel();
     const closeModal = () => { releaseFocusInside(modal); modal.remove(); };
     cancel.onclick = closeModal; start.onclick = async () => {
-        const targetMode = modeSelect.value;
+        const targetMode = selectedAsset ? "all" : modeSelect.value;
         const items = yearbookTargets(visible, targetMode);
         if (!items.length) { alert("No LoRAs in this filtered scope match the selected Yearbook target."); return; }
         const promptText = textarea.value.trim(); if (!promptText) { alert("Enter the prompt to use for the yearbook run."); return; }
@@ -1257,6 +1277,9 @@ function openYearbookDialog() {
         catch (error) { alert(`Could not read ComfyUI's live LoRA list: ${error.message}`); start.disabled = false; updateStartLabel(); return; }
         localStorage.setItem(YEARBOOK_PROMPT_KEY, promptText);
         localStorage.setItem(YEARBOOK_THEATER_ENABLED_KEY, theaterCheck.checked ? "true" : "false");
+        localStorage.setItem(YEARBOOK_THUMB_SIZE_KEY, thumbSize.value);
+        localStorage.setItem(YEARBOOK_THUMB_BUDGET_KEY, thumbBudget.value);
+        localStorage.setItem(YEARBOOK_LORA_PREVIEW_KEY, loraPreviewCheck.checked ? "true" : "false");
         const originals = [
             ...captureNodeValues(loader, ["main_enabled", "main_lora", "main_strength", "control_after_generate"]),
             ...captureNodeValues(prompt, ["prompt_source", "manual_prompt"]),
@@ -1266,8 +1289,8 @@ function openYearbookDialog() {
         setWidget(loader, "main_enabled", true); setWidget(loader, "control_after_generate", "fixed");
         setWidget(prompt, "prompt_source", "manual"); setWidget(prompt, "manual_prompt", promptText);
         for (const output of outputs) setWidget(output, "output_root", LORA_YEARBOOK_OUTPUT_ROOT);
-        const orderMode = orderSelect.value;
-        const run = { runId: ++yearbookRunSerial, items: orderedYearbookItems(items, orderMode), liveLoras, index: 0, captured: 0, skipped: 0, replace: targetMode !== "missing", targetMode, orderMode, autoQueue: autoCheck.checked, theaterEnabled: theaterCheck.checked, theater: null, completed: false, loader, prompt, generation, outputs, strength, width, height, seed, originals, timers: new Set(), stopped: false, restored: false, queuePromise: null, queueStarted: false, waitingForQueue: false, executionObserved: false, interruptRequested: false };
+        const orderMode = selectedAsset ? "current_view" : orderSelect.value;
+        const run = { runId: ++yearbookRunSerial, items: orderedYearbookItems(items, orderMode), liveLoras, index: 0, captured: 0, skipped: 0, replace: targetMode !== "missing", targetMode, orderMode, autoQueue: autoCheck.checked, theaterEnabled: theaterCheck.checked, thumbnailLongEdge: Number(thumbSize.value), thumbnailMaxKib: Number(thumbBudget.value), saveLoraPreview: loraPreviewCheck.checked, theater: null, completed: false, loader, prompt, generation, outputs, strength, width, height, seed, originals, timers: new Set(), stopped: false, restored: false, queuePromise: null, queueStarted: false, waitingForQueue: false, executionObserved: false, interruptRequested: false };
         applyYearbookRunSettings(run);
         yearbook = run;
         window.__soYearbookRunActive = true;
@@ -1281,8 +1304,11 @@ function openYearbookDialog() {
         updateYearbookProgress(); scheduleYearbook(run, setYearbookCurrent, 180);
     };
     buttons.append(cancel, start);
-    card.append(title, copy, settingsTitle, settings, promptTitle, textarea, modeTitle, modeSelect, modeCopy, orderTitle, orderSelect, orderCopy, auto, theaterToggle, buttons);
+    card.append(title, copy, settingsTitle, settings, promptTitle, textarea);
+    if (!selectedAsset) card.append(modeTitle, modeSelect, modeCopy, orderTitle, orderSelect, orderCopy);
+    card.append(auto, theaterToggle, loraPreviewToggle, buttons);
     modal.append(card); document.body.append(modal); isolateTextInput(modal); strengthInput.focus(); strengthInput.select();
+    return true;
 }
 
 function catalogMaintenanceScope(scope) {
@@ -1356,8 +1382,8 @@ async function fillCivitai() {
     setFeedback(`Civitai fill finished · ${found} compact local thumbnail${found === 1 ? "" : "s"} cached${failures.length ? ` · ${failures.length} failed (see console)` : ""}.`, failures.length ? "#f4ec51" : "#69e49a");
 }
 
-async function savePreviewThumbnail(image, { assetId = "", lora = "", replace = false, source = "generated:preview" } = {}) {
-    return request("/thumbnail/from-preview", { method: "POST", body: { asset_id: assetId, lora, image, replace, source } });
+async function savePreviewThumbnail(image, { assetId = "", lora = "", replace = false, source = "generated:preview", thumbnailLongEdge = 512, thumbnailMaxKib = 160, saveLoraPreview = false } = {}) {
+    return request("/thumbnail/from-preview", { method: "POST", body: { asset_id: assetId, lora, image, replace, source, thumbnail_long_edge: thumbnailLongEdge, thumbnail_max_kib: thumbnailMaxKib, save_lora_preview: saveLoraPreview } });
 }
 
 function previewKey(image) { return `${image?.type || "temp"}/${image?.subfolder || ""}/${image?.filename || ""}`; }
@@ -1371,7 +1397,7 @@ async function handlePreviewExecuted(event) {
         if (yearbook.autoQueue && (!yearbook.queueStarted || yearbook.waitingForQueue)) return;
         const item = yearbook.items[yearbook.index]; if (!item) return;
         try {
-            const result = await savePreviewThumbnail(image, { assetId: item.asset_id, replace: yearbook.replace, source: "generated:yearbook" });
+            const result = await savePreviewThumbnail(image, { assetId: item.asset_id, replace: yearbook.replace, source: "generated:yearbook", thumbnailLongEdge: yearbook.thumbnailLongEdge, thumbnailMaxKib: yearbook.thumbnailMaxKib, saveLoraPreview: yearbook.saveLoraPreview });
             if (!result.skipped) updateCachedThumbnail(item.asset_id, result.thumbnail);
             yearbook.captured += 1;
             appendYearbookTheaterEntry(yearbook, item, result.thumbnail);
@@ -1476,7 +1502,7 @@ async function openReview(options = null) {
     const quarantineRejectedButton = action("Quarantine rejected", "#ff3eaf"); quarantineRejectedButton.onclick = () => quarantineRejected(quarantineRejectedButton);
     const catalogToolsButton = action("Catalog tools", "#9c62ff"); catalogToolsButton.onclick = openCatalogTools;
     const theaterButton = action("THEATER", "#b89aff"); theaterButton.dataset.yearbookTheater = ""; theaterButton.hidden = !(yearbook?.theaterEnabled); theaterButton.onclick = () => { if (!yearbook) return; yearbook.theaterEnabled = true; openYearbookTheater(yearbook); };
-    const yearbookButton = action(yearbook ? "Stop yearbook" : "Yearbook run", "#f4ec51"); yearbookButton.dataset.yearbook = ""; if (yearbook) yearbookButton.classList.add("active"); yearbookButton.onclick = openYearbookDialog;
+    const yearbookButton = action(yearbook ? "Stop yearbook" : "Yearbook run", "#f4ec51"); yearbookButton.dataset.yearbook = ""; if (yearbook) yearbookButton.classList.add("active"); yearbookButton.onclick = () => openYearbookDialog();
     const x = action("×", "#48e8ee", "so-lib-icon"); x.onclick = closeReview;
     header.append(title, status, scan, civitai, quarantineRejectedButton, catalogToolsButton, theaterButton, yearbookButton, x);
     const progress = document.createElement("div"); progress.className = "so-lib-yearbook-progress"; progress.dataset.yearbookProgress = ""; progress.hidden = true;

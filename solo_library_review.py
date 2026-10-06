@@ -336,40 +336,41 @@ def _delete_thumbnail_files(records: list[dict[str, Any]], *, purge_all: bool = 
     return deleted
 
 
-def _save_thumbnail(image: Image.Image, asset_id: str, source: str, source_url: str = "") -> dict[str, Any]:
+def _save_thumbnail(image: Image.Image, asset_id: str, source: str, source_url: str = "", *, bound: tuple[int, int] = _THUMB_BOUND, max_bytes: int = _MAX_THUMB_BYTES, crop_portrait: bool = True) -> dict[str, Any]:
     if int(image.width) * int(image.height) > _MAX_IMAGE_PIXELS:
         raise ValueError("Thumbnail source images are limited to 100 megapixels")
     prepared = ImageOps.exif_transpose(image).convert("RGB")
-    # Every gallery asset is physically portrait too, rather than asking the
-    # browser to repeatedly crop arbitrary full-size showcase images.
-    source_ratio = prepared.width / prepared.height
-    target_ratio = _THUMB_BOUND[0] / _THUMB_BOUND[1]
-    if source_ratio > target_ratio:
-        crop_width = max(1, round(prepared.height * target_ratio))
-        left = max(0, (prepared.width - crop_width) // 2)
-        prepared = prepared.crop((left, 0, left + crop_width, prepared.height))
-    elif source_ratio < target_ratio:
-        crop_height = max(1, round(prepared.width / target_ratio))
-        top = max(0, (prepared.height - crop_height) // 2)
-        prepared = prepared.crop((0, top, prepared.width, top + crop_height))
-    prepared.thumbnail(_THUMB_BOUND, Image.Resampling.LANCZOS)
+    # General catalog thumbnails use a portrait crop; Yearbook keeps the generated framing.
+    if crop_portrait:
+        source_ratio = prepared.width / prepared.height
+        target_ratio = bound[0] / bound[1]
+        if source_ratio > target_ratio:
+            crop_width = max(1, round(prepared.height * target_ratio))
+            left = max(0, (prepared.width - crop_width) // 2)
+            prepared = prepared.crop((left, 0, left + crop_width, prepared.height))
+        elif source_ratio < target_ratio:
+            crop_height = max(1, round(prepared.width / target_ratio))
+            top = max(0, (prepared.height - crop_height) // 2)
+            prepared = prepared.crop((0, top, prepared.width, top + crop_height))
+    prepared.thumbnail(bound, Image.Resampling.LANCZOS)
     if not prepared.width or not prepared.height:
         raise ValueError("The selected image has no usable pixels")
     encoded = b""
     working = prepared
+    qualities = (92, 86, 80, 76, 68, 60, 52) if max_bytes > _MAX_THUMB_BYTES else (76, 68, 60, 52)
     for scale in (1.0, .88, .76):
         if scale != 1.0:
             working = prepared.resize(
                 (max(1, round(prepared.width * scale)), max(1, round(prepared.height * scale))),
                 Image.Resampling.LANCZOS,
             )
-        for quality in (76, 68, 60, 52):
+        for quality in qualities:
             buffer = io.BytesIO()
             working.save(buffer, "WEBP", quality=quality, method=6)
             encoded = buffer.getvalue()
-            if len(encoded) <= _MAX_THUMB_BYTES:
+            if len(encoded) <= max_bytes:
                 break
-        if len(encoded) <= _MAX_THUMB_BYTES:
+        if len(encoded) <= max_bytes:
             break
     filename = _thumbnail_filename(asset_id)
     target = _thumbnail_directory() / filename
@@ -386,9 +387,37 @@ def _save_thumbnail(image: Image.Image, asset_id: str, source: str, source_url: 
     }
 
 
-def _save_thumbnail_path(path: Path, asset_id: str, source: str) -> dict[str, Any]:
+def _save_thumbnail_path(path: Path, asset_id: str, source: str, *, bound: tuple[int, int] = _THUMB_BOUND, max_bytes: int = _MAX_THUMB_BYTES, crop_portrait: bool = True) -> dict[str, Any]:
     with Image.open(path) as image:
-        return _save_thumbnail(image, asset_id, source, str(path))
+        return _save_thumbnail(image, asset_id, source, str(path), bound=bound, max_bytes=max_bytes, crop_portrait=crop_portrait)
+
+
+def _save_yearbook_lora_preview(image_path: Path, lora_path: Path) -> Path:
+    if not lora_path.is_file() or not _inside_lora_root(lora_path):
+        raise ValueError("The LoRA is no longer inside a configured LoRA folder")
+    suffix = image_path.suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise ValueError("Yearbook preview must be a PNG, JPEG, or WebP image")
+    sidecar = lora_path.with_suffix(".metadata.json")
+    if sidecar.exists():
+        metadata = _read_json(sidecar)
+        if not isinstance(metadata, dict):
+            raise ValueError(f"Cannot update invalid metadata sidecar: {sidecar.name}")
+    else:
+        metadata = {}
+    preview = lora_path.with_name(f"{lora_path.stem}.yearbook{suffix}")
+    image_temp = preview.with_name(preview.name + ".tmp")
+    metadata_temp = sidecar.with_name(sidecar.name + ".tmp")
+    try:
+        shutil.copyfile(image_path, image_temp)
+        metadata["preview_url"] = preview.as_posix()
+        metadata_temp.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        image_temp.replace(preview)
+        metadata_temp.replace(sidecar)
+    finally:
+        image_temp.unlink(missing_ok=True)
+        metadata_temp.unlink(missing_ok=True)
+    return preview
 
 
 def _image_from_remote(url: str) -> Image.Image:
@@ -803,7 +832,7 @@ if PromptServer is not None and web is not None:
     async def solo_library_thumbnail_from_preview(request):
         try:
             payload = await request.json()
-            asset_id, _asset = _asset_from_reference(str(payload.get("asset_id") or ""), str(payload.get("lora") or ""))
+            asset_id, asset = _asset_from_reference(str(payload.get("asset_id") or ""), str(payload.get("lora") or ""))
             existing = get_catalog().thumbnail(asset_id)
             if existing and not _thumbnail_record_available(existing):
                 get_catalog().clear_thumbnail(asset_id)
@@ -811,12 +840,22 @@ if PromptServer is not None and web is not None:
             if existing and not bool(payload.get("replace", False)):
                 return web.json_response({"ok": True, "skipped": True, "asset_id": asset_id, "thumbnail": existing})
             image_path = _resolve_comfy_image(dict(payload.get("image") or {}))
+            is_yearbook = str(payload.get("source") or "") == "generated:yearbook"
+            long_edge = int(payload.get("thumbnail_long_edge") or 512) if is_yearbook else 512
+            max_kib = int(payload.get("thumbnail_max_kib") or 160) if is_yearbook else 160
+            if long_edge not in {512, 1024, 1600, 2048} or max_kib not in {160, 512, 1024, 2048, 4096}:
+                raise ValueError("Unsupported Yearbook thumbnail quality setting")
             result = await asyncio.to_thread(
                 _save_thumbnail_path, image_path, asset_id,
                 str(payload.get("source") or "generated:preview"),
+                bound=(long_edge, long_edge) if is_yearbook else _THUMB_BOUND,
+                max_bytes=max_kib * 1024, crop_portrait=not is_yearbook,
             )
-            return web.json_response({"ok": True, "skipped": False, "asset_id": asset_id, "thumbnail": result})
-        except (OSError, ValueError) as error:
+            preview_path = None
+            if is_yearbook and payload.get("save_lora_preview") is True:
+                preview_path = await asyncio.to_thread(_save_yearbook_lora_preview, image_path, Path(str(asset.get("current_path") or "")))
+            return web.json_response({"ok": True, "skipped": False, "asset_id": asset_id, "thumbnail": result, "lora_preview": str(preview_path) if preview_path else None})
+        except (OSError, TypeError, ValueError) as error:
             return web.json_response({"ok": False, "error": str(error)}, status=400)
 
     @PromptServer.instance.routes.post("/sickollie/library-review/thumbnail/upload/{asset_id}")
