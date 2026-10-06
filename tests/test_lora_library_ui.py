@@ -62,6 +62,21 @@ class LoraLibraryUiTests(unittest.TestCase):
         self.assertIn('for (const output of run.outputs || []) setWidget(output, "output_root", LORA_YEARBOOK_OUTPUT_ROOT);', self.source)
         self.assertIn('outputs.some(output => widgetConnected(output, "output_root"))', self.source)
 
+    def test_yearbook_sends_quality_and_optional_lora_preview_settings(self) -> None:
+        self.assertIn('Library thumbnail size', self.source)
+        self.assertIn('Thumbnail file budget', self.source)
+        self.assertIn('Save full image beside each LoRA and update preview_url', self.source)
+        self.assertIn('thumbnail_long_edge: thumbnailLongEdge, thumbnail_max_kib: thumbnailMaxKib, save_lora_preview: saveLoraPreview', self.source)
+        self.assertIn('thumbnailLongEdge: yearbook.thumbnailLongEdge, thumbnailMaxKib: yearbook.thumbnailMaxKib, saveLoraPreview: yearbook.saveLoraPreview', self.source)
+
+    def test_detail_yearbook_targets_only_selected_lora_and_replaces_its_thumbnail(self) -> None:
+        self.assertIn('action("Yearbook this LoRA", "#f4ec51")', self.source)
+        self.assertIn('if (openYearbookDialog(selected))', self.source)
+        self.assertIn('const visible = selectedAsset ? [selectedAsset].filter(asset => asset.relative_lora)', self.source)
+        self.assertIn('const targetMode = selectedAsset ? "all" : modeSelect.value;', self.source)
+        self.assertIn('const orderMode = selectedAsset ? "current_view" : orderSelect.value;', self.source)
+        self.assertIn('yearbookButton.onclick = () => openYearbookDialog();', self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
